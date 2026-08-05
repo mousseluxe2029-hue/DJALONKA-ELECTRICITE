@@ -63,10 +63,10 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);margi
 .sidebar-brand div span{font-size:11px;color:#93a4bb;}
 .nav-section-title{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:#6f83a0;padding:16px 18px 6px;}
 .sidebar .nav-link{
-  color:#c3cee0;padding:9px 18px;font-size:13.5px;display:flex;align-items:center;gap:10px;
+  color:#c3cee0;padding:12px 18px;font-size:14px;display:flex;align-items:center;gap:14px;
   border-left:3px solid transparent;cursor:pointer;
 }
-.sidebar .nav-link i{width:18px;text-align:center;font-size:14px;}
+.sidebar .nav-link i{width:24px;text-align:center;font-size:19px;}
 .sidebar .nav-link:hover{background:rgba(255,255,255,.06);color:#fff;}
 .sidebar .nav-link.active{background:rgba(245,166,35,.12);color:#fff;border-left-color:var(--accent);}
 .badge-count{margin-left:auto;background:var(--danger);color:#fff;font-size:10px;padding:1px 7px;border-radius:10px;}
@@ -110,7 +110,39 @@ table.gc-table tbody tr:hover{background:#f9fbfd;}
 .prod-tile .pr{color:var(--accent2);font-weight:700;font-size:13px;}
 .prod-tile .stk{font-size:11px;color:var(--muted);}
 
+/* ---------- GRANDES ICONES / RACCOURCIS ---------- */
+.quick-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px;}
+.quick-tile{
+  background:var(--card);border:1px solid var(--border);border-radius:16px;
+  padding:18px 10px;display:flex;flex-direction:column;align-items:center;gap:10px;
+  cursor:pointer;transition:.15s;text-align:center;
+}
+.quick-tile:hover{border-color:var(--accent);transform:translateY(-3px);box-shadow:0 10px 20px rgba(0,0,0,.07);}
+.quick-tile:active{transform:translateY(0);}
+.quick-tile .qi{
+  width:56px;height:56px;border-radius:16px;display:flex;align-items:center;justify-content:center;
+  font-size:26px;color:#fff;
+}
+.quick-tile .qlbl{font-size:12.5px;font-weight:700;color:var(--navy);line-height:1.25;}
+
+/* ---------- BARRE D'ICONES MOBILE (bas d'ecran) ---------- */
+.bottom-tabbar{display:none;}
+@media (max-width: 767px){
+  .bottom-tabbar{
+    display:flex;position:fixed;left:0;right:0;bottom:0;height:64px;background:#fff;
+    border-top:1px solid var(--border);box-shadow:0 -4px 14px rgba(0,0,0,.06);z-index:1040;
+  }
+  .bottom-tabbar a{
+    flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+    color:var(--muted);text-decoration:none;font-size:10.5px;font-weight:600;
+  }
+  .bottom-tabbar a i{font-size:21px;}
+  .bottom-tabbar a.active{color:var(--accent2);}
+  .main-wrap{padding-bottom:64px;}
+}
+
 .cart-line{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;}
+.cart-line > div:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .qty-box{width:56px;padding:3px 6px;border-radius:6px;border:1px solid var(--border);text-align:center;}
 
 .modal-content{border-radius:16px;border:none;}
@@ -133,6 +165,28 @@ kbd{background:#eef2f8;color:var(--navy2);border:1px solid #d6dee9;border-radius
   .main-wrap{margin-left:0;}
   #menuToggle{display:inline-flex;}
   .pos-grid{grid-template-columns:1fr;}
+}
+@media (max-width: 767px){
+  .content{padding:14px 12px;}
+  .topbar{padding:10px 14px;flex-wrap:wrap;gap:8px;}
+  .topbar h5{font-size:15px;}
+  .section-card{padding:14px;}
+  .stat-card{padding:14px 14px;}
+  .stat-card .val{font-size:19px;}
+  table.gc-table{font-size:12.5px;}
+  table.gc-table thead th{padding:8px 8px;}
+  table.gc-table tbody td{padding:8px 8px;}
+  .login-card{padding:30px 22px;}
+  .modal-dialog{margin:.75rem;}
+  .quick-grid{grid-template-columns:repeat(3,1fr);gap:10px;}
+  .quick-tile{padding:14px 6px;border-radius:14px;}
+  .quick-tile .qi{width:48px;height:48px;font-size:22px;border-radius:14px;}
+  .quick-tile .qlbl{font-size:11.5px;}
+}
+@media (max-width: 480px){
+  .topbar .store-pill{max-width:120px;}
+  .login-card{padding:24px 16px;}
+  .login-logo{width:72px;height:72px;}
 }
 .spinner-overlay{position:fixed;inset:0;background:rgba(255,255,255,.7);display:none;align-items:center;justify-content:center;z-index:3000;}
 .empty-state{text-align:center;padding:40px 10px;color:var(--muted);}
@@ -200,7 +254,7 @@ kbd{background:#eef2f8;color:var(--navy2);border:1px solid #d6dee9;border-radius
         <button id="menuToggle" class="btn btn-icon"><i class="fa-solid fa-bars"></i></button>
         <h5 id="pageTitle">Tableau de bord</h5>
       </div>
-      <div class="d-flex align-items-center gap-2">
+      <div class="d-flex align-items-center gap-2 flex-wrap">
         <button class="btn-icon" title="Raccourcis clavier (?)" onclick="Shortcuts.showHelp()"><i class="fa-solid fa-keyboard"></i></button>
         <select id="storeSwitcher" class="form-select form-select-sm store-pill" style="width:auto;border:none;"></select>
         <div class="dropdown">
@@ -215,6 +269,14 @@ kbd{background:#eef2f8;color:var(--navy2);border:1px solid #d6dee9;border-radius
     </div>
     <div class="content" id="pageContent"></div>
   </div>
+
+  <nav class="bottom-tabbar" id="bottomTabbar">
+    <a href="#" data-page="dashboard" onclick="Router.go('dashboard');return false;"><i class="fa-solid fa-gauge-high"></i>Accueil</a>
+    <a href="#" data-page="pos" onclick="Router.go('pos');return false;"><i class="fa-solid fa-cash-register"></i>Vente</a>
+    <a href="#" data-page="stocks" onclick="Router.go('stocks');return false;"><i class="fa-solid fa-warehouse"></i>Stocks</a>
+    <a href="#" data-page="clients" onclick="Router.go('clients');return false;"><i class="fa-solid fa-users"></i>Clients</a>
+    <a href="#" onclick="document.getElementById('sidebar').classList.add('show');return false;"><i class="fa-solid fa-bars"></i>Menu</a>
+  </nav>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
@@ -337,6 +399,8 @@ const AppState = {
   clients: [],
   posStock: {},
   cart: [],
+  suppliers: [],
+  achatLines: [],
   currentPage: 'dashboard'
 };
 
@@ -350,10 +414,10 @@ const NAV_ITEMS = [
   { id:'clients',       label:'Clients',                icon:'fa-users',             section:'Ventes' },
   { id:'catalogue',     label:'Catalogue produits',     icon:'fa-boxes-stacked',     section:'Stock' },
   { id:'stocks',        label:'Gestion des stocks',     icon:'fa-warehouse',         section:'Stock' },
-  { id:'transferts',    label:'Transferts de stock',    icon:'fa-truck-ramp-box',    section:'Stock', soon:true },
-  { id:'fournisseurs',  label:'Fournisseurs',           icon:'fa-industry',          section:'Achats', soon:true },
-  { id:'achats',        label:'Achats',                 icon:'fa-cart-shopping',     section:'Achats', soon:true },
-  { id:'rapports',      label:'Rapports & statistiques',icon:'fa-chart-line',        section:'Analyse', soon:true },
+  { id:'transferts',    label:'Transferts de stock',    icon:'fa-truck-ramp-box',    section:'Stock' },
+  { id:'fournisseurs',  label:'Fournisseurs',           icon:'fa-industry',          section:'Achats' },
+  { id:'achats',        label:'Achats',                 icon:'fa-cart-shopping',     section:'Achats' },
+  { id:'rapports',      label:'Rapports & statistiques',icon:'fa-chart-line',        section:'Analyse' },
   { id:'notifications', label:'Notifications',          icon:'fa-bell',              section:'Analyse', soon:true },
   { id:'points_vente',  label:'Points de vente',        icon:'fa-store',             section:'Administration', adminOnly:true },
   { id:'utilisateurs',  label:'Utilisateurs & rôles',   icon:'fa-user-gear',         section:'Administration', adminOnly:true, soon:true },
@@ -421,10 +485,27 @@ function buildNavMenu(){
   document.getElementById('navMenu').innerHTML = html;
 }
 
+// Palette de couleurs pour les tuiles d'icônes du tableau de bord
+const QUICK_COLORS = ['#f5941f','#173868','#1a9e6d','#e5484d','#7c5cff','#0891b2','#c026d3','#ca8a04','#0f2452'];
+
+function buildQuickGrid(){
+  const items = NAV_ITEMS.filter(it=>{
+    if(it.id==='dashboard' || it.soon) return false;
+    if(it.adminOnly && AppState.role!=='admin') return false;
+    return true;
+  });
+  return items.map((it,i)=>`
+    <div class="quick-tile" onclick="Router.go('${it.id}')">
+      <div class="qi" style="background:${QUICK_COLORS[i%QUICK_COLORS.length]};"><i class="fa-solid ${it.icon}"></i></div>
+      <div class="qlbl">${it.label}</div>
+    </div>`).join('');
+}
+
 const Router = {
   go(pageId){
     AppState.currentPage = pageId;
     document.querySelectorAll('.sidebar .nav-link').forEach(a=>a.classList.toggle('active', a.dataset.page===pageId));
+    document.querySelectorAll('.bottom-tabbar a').forEach(a=>a.classList.toggle('active', a.dataset.page===pageId));
     const item = NAV_ITEMS.find(i=>i.id===pageId);
     document.getElementById('pageTitle').textContent = item ? item.label : '';
     document.getElementById('sidebar').classList.remove('show');
@@ -436,6 +517,10 @@ const Router = {
       clients: ()=>Pages.clients(),
       catalogue: ()=>Pages.catalogue(),
       stocks: ()=>Pages.stocks(),
+      transferts: ()=>Pages.transferts(),
+      fournisseurs: ()=>Pages.fournisseurs(),
+      achats: ()=>Pages.achats(),
+      rapports: ()=>Pages.rapports(),
       points_vente: ()=>Pages.pointsVente()
     };
     (renderers[pageId] || (()=>Pages.comingSoon(pageId)))();
@@ -461,6 +546,7 @@ const Pages = {
     showSpinner();
     const content = document.getElementById('pageContent');
     content.innerHTML = `
+      <div class="quick-grid" id="quickGrid"></div>
       <div class="row g-3" id="kpiRow"></div>
       <div class="row g-3 mt-1">
         <div class="col-lg-8"><div class="section-card"><h6>Ventes des 7 derniers jours</h6><canvas id="salesChart" height="95"></canvas></div></div>
@@ -470,6 +556,7 @@ const Pages = {
         <thead><tr><th>Date</th><th>Magasin</th><th>Caissier</th><th>Paiement</th><th class="text-end">Montant</th></tr></thead>
         <tbody id="recentSalesBody"><tr><td colspan="5" class="text-center py-4 text-muted">Chargement...</td></tr></tbody>
       </table></div></div>`;
+    document.getElementById('quickGrid').innerHTML = buildQuickGrid();
     try{
       const [storesSnap, productsSnap, stocksSnap] = await Promise.all([
         db.collection('points_vente').get(),
@@ -756,6 +843,328 @@ const Pages = {
     finally{ hideSpinner(); }
   },
 
+  // ---------------- TRANSFERTS DE STOCK ----------------
+  async transferts(){
+    showSpinner();
+    const content=document.getElementById('pageContent');
+    content.innerHTML = `
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <select id="trStoreFilter" class="form-select form-select-sm" style="width:240px;"></select>
+        <button class="btn btn-brand btn-sm" onclick="Pages.openTransferModal()"><i class="fa-solid fa-truck-ramp-box me-1"></i>Nouveau transfert</button>
+      </div>
+      <div class="section-card"><div class="table-responsive"><table class="gc-table">
+        <thead><tr><th>Date</th><th>Produit</th><th>De</th><th>Vers</th><th class="text-end">Quantité</th><th>Motif</th><th>Agent</th></tr></thead>
+        <tbody id="transfersBody"><tr><td colspan="7" class="text-center py-4 text-muted">Chargement...</td></tr></tbody>
+      </table></div></div>`;
+    try{
+      const [trSnap, prodSnap, storesSnap] = await Promise.all([
+        db.collection('transferts').orderBy('date','desc').limit(100).get(),
+        db.collection('catalogue').get(),
+        db.collection('points_vente').orderBy('nom').get()
+      ]);
+      AppState.products = prodSnap.docs.map(d=>({id:d.id,...d.data()}));
+      AppState.stores = storesSnap.docs.map(d=>({id:d.id,...d.data()}));
+      const allTransfers = trSnap.docs.map(d=>({id:d.id,...d.data()}));
+      const sel=document.getElementById('trStoreFilter');
+      sel.innerHTML = '<option value="">Tous les magasins</option>'+AppState.stores.map(s=>`<option value="${s.id}">${s.nom}</option>`).join('');
+      const render = ()=>{
+        const storeId = sel.value;
+        const rows = allTransfers.filter(t=>!storeId || t.magasin_source_id===storeId || t.magasin_dest_id===storeId);
+        document.getElementById('transfersBody').innerHTML = rows.length ? rows.map(t=>{
+          const p = AppState.products.find(p=>p.id===t.produit_id);
+          const src = AppState.stores.find(s=>s.id===t.magasin_source_id);
+          const dst = AppState.stores.find(s=>s.id===t.magasin_dest_id);
+          return `<tr><td>${fmtDate(tsToDate(t.date))}</td><td style="font-weight:600;">${p?p.nom:'Produit supprimé'}</td>
+          <td>${src?src.nom:'-'}</td><td>${dst?dst.nom:'-'}</td>
+          <td class="text-end">${t.quantite||0}</td><td>${t.motif||'-'}</td><td class="small text-muted">${t.user||'-'}</td></tr>`;
+        }).join('') : `<tr><td colspan="7" class="text-center py-4 text-muted">Aucun transfert enregistré</td></tr>`;
+      };
+      sel.addEventListener('change', render);
+      render();
+    }catch(err){ console.error(err); Toast.show('Erreur transferts : '+err.message,'danger'); }
+    finally{ hideSpinner(); }
+  },
+
+  async openTransferModal(){
+    if(!AppState.stores.length){ const s = await db.collection('points_vente').get(); AppState.stores=s.docs.map(d=>({id:d.id,...d.data()})); }
+    if(!AppState.products.length){ const p = await db.collection('catalogue').get(); AppState.products=p.docs.map(d=>({id:d.id,...d.data()})); }
+    if(AppState.stores.length<2){
+      Toast.show('Il faut au moins deux points de vente pour effectuer un transfert.', 'danger'); return;
+    }
+    if(!AppState.products.length){
+      Toast.show("Créez d'abord au moins un produit.", 'danger'); return;
+    }
+    const body = `<form id="transferForm">
+      <div class="row g-2 mb-3">
+        <div class="col-6"><label class="form-label small fw-semibold">Magasin source</label>
+          <select id="trSource" class="form-select">${AppState.stores.map(s=>`<option value="${s.id}">${s.nom}</option>`).join('')}</select></div>
+        <div class="col-6"><label class="form-label small fw-semibold">Magasin destination</label>
+          <select id="trDest" class="form-select">${AppState.stores.map(s=>`<option value="${s.id}">${s.nom}</option>`).join('')}</select></div>
+      </div>
+      <div class="mb-3"><label class="form-label small fw-semibold">Produit</label>
+        <select id="trProduct" class="form-select">${AppState.products.map(p=>`<option value="${p.id}">${p.nom}</option>`).join('')}</select></div>
+      <div class="mb-3"><label class="form-label small fw-semibold">Quantité</label>
+        <input type="number" min="1" id="trQty" class="form-control" required></div>
+      <div class="mb-3"><label class="form-label small fw-semibold">Motif</label>
+        <input type="text" id="trMotif" class="form-control" placeholder="ex : réassort, rééquilibrage stock..."></div>
+      <button type="submit" class="btn btn-brand w-100">Valider le transfert</button>
+    </form>`;
+    const modal = openModal('Transfert de stock', body);
+    document.getElementById('transferForm').addEventListener('submit', async e=>{
+      e.preventDefault();
+      const magasin_source_id = document.getElementById('trSource').value;
+      const magasin_dest_id = document.getElementById('trDest').value;
+      if(magasin_source_id===magasin_dest_id){ Toast.show('Le magasin source et destination doivent être différents.', 'danger'); return; }
+      await Pages.saveTransfer({
+        magasin_source_id, magasin_dest_id,
+        produit_id: document.getElementById('trProduct').value,
+        quantite: parseInt(document.getElementById('trQty').value,10),
+        motif: document.getElementById('trMotif').value
+      });
+      modal.hide();
+    });
+  },
+
+  async saveTransfer({magasin_source_id, magasin_dest_id, produit_id, quantite, motif}){
+    showSpinner();
+    try{
+      const srcRef = db.collection('stocks').doc(`${produit_id}_${magasin_source_id}`);
+      const dstRef = db.collection('stocks').doc(`${produit_id}_${magasin_dest_id}`);
+      await db.runTransaction(async tx=>{
+        const [srcDoc, dstDoc] = await Promise.all([tx.get(srcRef), tx.get(dstRef)]);
+        const srcQty = srcDoc.exists?(srcDoc.data().quantite||0):0;
+        const dstQty = dstDoc.exists?(dstDoc.data().quantite||0):0;
+        if(srcQty<quantite) throw new Error('Quantité insuffisante dans le magasin source pour ce transfert.');
+        tx.set(srcRef, {produit_id, magasin_id:magasin_source_id, quantite: srcQty-quantite}, {merge:true});
+        tx.set(dstRef, {produit_id, magasin_id:magasin_dest_id, quantite: dstQty+quantite}, {merge:true});
+      });
+      const now = firebase.firestore.FieldValue.serverTimestamp();
+      const batch = db.batch();
+      batch.set(db.collection('mouvements_stock').doc(), { produit_id, magasin_id:magasin_source_id, type:'transfert_sortie',
+        quantite, motif: motif||'Transfert de stock', date: now, user: AppState.user.email });
+      batch.set(db.collection('mouvements_stock').doc(), { produit_id, magasin_id:magasin_dest_id, type:'transfert_entree',
+        quantite, motif: motif||'Transfert de stock', date: now, user: AppState.user.email });
+      batch.set(db.collection('transferts').doc(), { produit_id, magasin_source_id, magasin_dest_id, quantite,
+        motif: motif||'', date: now, user: AppState.user.email });
+      await batch.commit();
+      Toast.show('Transfert de stock effectué','success');
+      Pages.transferts();
+    }catch(err){ console.error(err); Toast.show('Erreur : '+err.message,'danger'); }
+    finally{ hideSpinner(); }
+  },
+
+  // ---------------- FOURNISSEURS ----------------
+  async fournisseurs(){
+    showSpinner();
+    const content=document.getElementById('pageContent');
+    content.innerHTML = `<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+      <input id="supplierSearch" class="form-control form-control-sm" style="width:260px;" placeholder="Rechercher un fournisseur...">
+      <button class="btn btn-brand btn-sm" onclick="Pages.openSupplierModal()"><i class="fa-solid fa-plus me-1"></i>Nouveau fournisseur</button></div>
+      <div class="section-card"><div class="table-responsive"><table class="gc-table">
+        <thead><tr><th>Nom</th><th>Contact</th><th>Téléphone</th><th>Email</th><th></th></tr></thead>
+        <tbody id="suppliersBody"><tr><td colspan="5" class="text-center py-4 text-muted">Chargement...</td></tr></tbody>
+      </table></div></div>`;
+    try{
+      const snap = await db.collection('fournisseurs').orderBy('nom').get();
+      AppState.suppliers = snap.docs.map(d=>({id:d.id,...d.data()}));
+      const render = ()=>{
+        const q=(document.getElementById('supplierSearch').value||'').toLowerCase();
+        const rows = AppState.suppliers.filter(s=>!q||(s.nom||'').toLowerCase().includes(q));
+        document.getElementById('suppliersBody').innerHTML = rows.length? rows.map(s=>`
+          <tr><td style="font-weight:600;">${s.nom}</td><td>${s.contact||'-'}</td>
+          <td>${s.telephone||'-'}</td><td>${s.email||'-'}</td>
+          <td class="text-end"><button class="btn-icon" onclick="Pages.openSupplierModal('${s.id}')"><i class="fa-solid fa-pen"></i></button>
+          <button class="btn-icon" onclick="Pages.deleteSupplier('${s.id}')"><i class="fa-solid fa-trash"></i></button></td></tr>`).join('')
+          : `<tr><td colspan="5" class="text-center py-4 text-muted">Aucun fournisseur</td></tr>`;
+      };
+      document.getElementById('supplierSearch').addEventListener('input', render);
+      render();
+    }catch(err){ console.error(err); Toast.show('Erreur : '+err.message,'danger'); }
+    finally{ hideSpinner(); }
+  },
+
+  async openSupplierModal(id){
+    let s = {nom:'',contact:'',telephone:'',email:'',adresse:''};
+    if(id){ const doc=await db.collection('fournisseurs').doc(id).get(); s=doc.data(); }
+    const body=`<form id="supplierForm">
+      <div class="mb-3"><label class="form-label small fw-semibold">Nom du fournisseur</label><input id="sNom" class="form-control" value="${s.nom||''}" required></div>
+      <div class="row g-2 mb-3">
+        <div class="col-6"><label class="form-label small fw-semibold">Personne à contacter</label><input id="sContact" class="form-control" value="${s.contact||''}"></div>
+        <div class="col-6"><label class="form-label small fw-semibold">Téléphone</label><input id="sTel" class="form-control" value="${s.telephone||''}"></div>
+      </div>
+      <div class="mb-3"><label class="form-label small fw-semibold">Email</label><input id="sEmail" class="form-control" value="${s.email||''}"></div>
+      <div class="mb-3"><label class="form-label small fw-semibold">Adresse</label><input id="sAdresse" class="form-control" value="${s.adresse||''}"></div>
+      <button type="submit" class="btn btn-brand w-100">${id?'Enregistrer':'Créer le fournisseur'}</button></form>`;
+    const modal = openModal(id?'Modifier le fournisseur':'Nouveau fournisseur', body);
+    document.getElementById('supplierForm').addEventListener('submit', async e=>{
+      e.preventDefault();
+      const data={nom:document.getElementById('sNom').value.trim(), contact:document.getElementById('sContact').value.trim(),
+        telephone:document.getElementById('sTel').value.trim(), email:document.getElementById('sEmail').value.trim(),
+        adresse:document.getElementById('sAdresse').value.trim()};
+      showSpinner();
+      try{
+        if(id) await db.collection('fournisseurs').doc(id).update(data); else await db.collection('fournisseurs').add(data);
+        Toast.show('Fournisseur enregistré','success'); modal.hide(); Pages.fournisseurs();
+      }catch(err){ Toast.show('Erreur : '+err.message,'danger'); } finally{ hideSpinner(); }
+    });
+  },
+
+  async deleteSupplier(id){
+    if(!confirm('Supprimer ce fournisseur ?')) return;
+    showSpinner();
+    try{ await db.collection('fournisseurs').doc(id).delete(); Toast.show('Fournisseur supprimé','success'); Pages.fournisseurs(); }
+    catch(err){ Toast.show('Erreur : '+err.message,'danger'); } finally{ hideSpinner(); }
+  },
+
+  // ---------------- ACHATS ----------------
+  async achats(){
+    showSpinner();
+    const content=document.getElementById('pageContent');
+    content.innerHTML = `<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+      <select id="achatStatusFilter" class="form-select form-select-sm" style="width:200px;">
+        <option value="">Tous les statuts</option>
+        <option value="en_attente">En attente</option>
+        <option value="recu">Reçu</option>
+      </select>
+      <button class="btn btn-brand btn-sm" onclick="Pages.openPurchaseModal()"><i class="fa-solid fa-plus me-1"></i>Nouvel achat</button></div>
+      <div class="section-card"><div class="table-responsive"><table class="gc-table">
+        <thead><tr><th>Date</th><th>Fournisseur</th><th>Magasin</th><th class="text-end">Total</th><th>Statut</th><th></th></tr></thead>
+        <tbody id="achatsBody"><tr><td colspan="6" class="text-center py-4 text-muted">Chargement...</td></tr></tbody>
+      </table></div></div>`;
+    try{
+      const [achSnap, supSnap, storesSnap] = await Promise.all([
+        db.collection('achats').orderBy('date','desc').limit(100).get(),
+        db.collection('fournisseurs').orderBy('nom').get(),
+        db.collection('points_vente').orderBy('nom').get()
+      ]);
+      AppState.suppliers = supSnap.docs.map(d=>({id:d.id,...d.data()}));
+      AppState.stores = storesSnap.docs.map(d=>({id:d.id,...d.data()}));
+      const allAchats = achSnap.docs.map(d=>({id:d.id,...d.data()}));
+      const render = ()=>{
+        const st = document.getElementById('achatStatusFilter').value;
+        const rows = allAchats.filter(a=>!st || a.statut===st);
+        document.getElementById('achatsBody').innerHTML = rows.length? rows.map(a=>{
+          const sup = AppState.suppliers.find(s=>s.id===a.fournisseur_id);
+          const store = AppState.stores.find(s=>s.id===a.magasin_id);
+          const recu = a.statut==='recu';
+          return `<tr><td>${fmtDate(tsToDate(a.date))}</td><td style="font-weight:600;">${sup?sup.nom:'Fournisseur supprimé'}</td>
+          <td>${store?store.nom:'-'}</td><td class="text-end">${fmtGNF(a.total)}</td>
+          <td><span class="badge-soft ${recu?'bg-soft-success':'bg-soft-warn'}">${recu?'Reçu':'En attente'}</span></td>
+          <td class="text-end">${recu?'':`<button class="btn btn-navy btn-sm" onclick="Pages.receivePurchase('${a.id}')"><i class="fa-solid fa-check me-1"></i>Marquer reçu</button>`}</td></tr>`;
+        }).join('') : `<tr><td colspan="6" class="text-center py-4 text-muted">Aucun achat enregistré</td></tr>`;
+      };
+      document.getElementById('achatStatusFilter').addEventListener('change', render);
+      render();
+    }catch(err){ console.error(err); Toast.show('Erreur achats : '+err.message,'danger'); }
+    finally{ hideSpinner(); }
+  },
+
+  async openPurchaseModal(){
+    if(!AppState.suppliers.length){ const s=await db.collection('fournisseurs').get(); AppState.suppliers=s.docs.map(d=>({id:d.id,...d.data()})); }
+    if(!AppState.stores.length){ const s=await db.collection('points_vente').get(); AppState.stores=s.docs.map(d=>({id:d.id,...d.data()})); }
+    if(!AppState.products.length){ const p=await db.collection('catalogue').get(); AppState.products=p.docs.map(d=>({id:d.id,...d.data()})); }
+    if(!AppState.suppliers.length){ Toast.show("Créez d'abord un fournisseur.", 'danger'); return; }
+    if(!AppState.stores.length || !AppState.products.length){ Toast.show("Créez d'abord un magasin et au moins un produit.", 'danger'); return; }
+    AppState.achatLines = [];
+    const body = `<div class="row g-2 mb-3">
+        <div class="col-6"><label class="form-label small fw-semibold">Fournisseur</label>
+          <select id="achSupplier" class="form-select">${AppState.suppliers.map(s=>`<option value="${s.id}">${s.nom}</option>`).join('')}</select></div>
+        <div class="col-6"><label class="form-label small fw-semibold">Magasin de réception</label>
+          <select id="achStore" class="form-select">${AppState.stores.map(s=>`<option value="${s.id}">${s.nom}</option>`).join('')}</select></div>
+      </div>
+      <div class="row g-2 mb-2">
+        <div class="col-12 col-sm-5"><select id="achLineProduct" class="form-select form-select-sm">${AppState.products.map(p=>`<option value="${p.id}">${p.nom}</option>`).join('')}</select></div>
+        <div class="col-4 col-sm-3"><input type="number" min="1" id="achLineQty" class="form-control form-control-sm" placeholder="Qté" value="1"></div>
+        <div class="col-5 col-sm-3"><input type="number" min="0" id="achLineCout" class="form-control form-control-sm" placeholder="Coût unitaire"></div>
+        <div class="col-3 col-sm-1"><button type="button" class="btn btn-navy btn-sm w-100" onclick="Pages.addAchatLine()"><i class="fa-solid fa-plus"></i></button></div>
+      </div>
+      <div id="achatLinesWrap" class="mb-2"></div>
+      <div class="text-end fw-bold mb-3" id="achatTotalWrap">Total : ${fmtGNF(0)}</div>
+      <button type="button" class="btn btn-brand w-100" onclick="Pages.savePurchase()">Créer la commande d'achat</button>`;
+    const modal = openModal('Nouvel achat', body, 'modal-lg');
+    Pages._achatModal = modal;
+    Pages.renderAchatLines();
+  },
+
+  addAchatLine(){
+    const produit_id = document.getElementById('achLineProduct').value;
+    const quantite = parseInt(document.getElementById('achLineQty').value,10)||0;
+    const cout_unitaire = parseFloat(document.getElementById('achLineCout').value)||0;
+    if(quantite<=0){ Toast.show('Quantité invalide','danger'); return; }
+    const p = AppState.products.find(p=>p.id===produit_id);
+    const existing = AppState.achatLines.find(l=>l.produit_id===produit_id);
+    if(existing){ existing.quantite+=quantite; existing.cout_unitaire=cout_unitaire||existing.cout_unitaire; }
+    else AppState.achatLines.push({produit_id, produit_nom:p?p.nom:'', quantite, cout_unitaire});
+    Pages.renderAchatLines();
+  },
+
+  removeAchatLine(id){ AppState.achatLines = AppState.achatLines.filter(l=>l.produit_id!==id); Pages.renderAchatLines(); },
+
+  renderAchatLines(){
+    const wrap = document.getElementById('achatLinesWrap');
+    if(!wrap) return;
+    wrap.innerHTML = AppState.achatLines.length ? AppState.achatLines.map(l=>`
+      <div class="cart-line">
+        <div class="flex-grow-1">${l.produit_nom}</div>
+        <div class="small text-muted">${l.quantite} × ${fmtGNF(l.cout_unitaire)}</div>
+        <div style="width:90px;text-align:right;font-weight:600;">${fmtGNF(l.quantite*l.cout_unitaire)}</div>
+        <button type="button" class="btn-icon" onclick="Pages.removeAchatLine('${l.produit_id}')"><i class="fa-solid fa-xmark"></i></button>
+      </div>`).join('') : '<div class="text-muted small">Aucune ligne ajoutée</div>';
+    const total = AppState.achatLines.reduce((s,l)=>s+l.quantite*l.cout_unitaire,0);
+    document.getElementById('achatTotalWrap').textContent = 'Total : '+fmtGNF(total);
+  },
+
+  async savePurchase(){
+    if(!AppState.achatLines.length){ Toast.show('Ajoutez au moins une ligne','danger'); return; }
+    const fournisseur_id = document.getElementById('achSupplier').value;
+    const magasin_id = document.getElementById('achStore').value;
+    const lignes = AppState.achatLines.map(l=>({...l}));
+    const total = lignes.reduce((s,l)=>s+l.quantite*l.cout_unitaire,0);
+    showSpinner();
+    try{
+      await db.collection('achats').add({
+        fournisseur_id, magasin_id, lignes, total, statut:'en_attente',
+        date: firebase.firestore.FieldValue.serverTimestamp(), user: AppState.user.email
+      });
+      Toast.show("Commande d'achat créée",'success');
+      if(Pages._achatModal) Pages._achatModal.hide();
+      AppState.achatLines = [];
+      Pages.achats();
+    }catch(err){ console.error(err); Toast.show('Erreur : '+err.message,'danger'); }
+    finally{ hideSpinner(); }
+  },
+
+  async receivePurchase(id){
+    if(!confirm('Confirmer la réception de cette commande ? Le stock du magasin sera mis à jour.')) return;
+    showSpinner();
+    try{
+      const doc = await db.collection('achats').doc(id).get();
+      if(!doc.exists) throw new Error('Commande introuvable.');
+      const a = doc.data();
+      if(a.statut==='recu'){ Toast.show('Cette commande a déjà été reçue.','danger'); return; }
+      await db.runTransaction(async tx=>{
+        const refs = a.lignes.map(l=>db.collection('stocks').doc(`${l.produit_id}_${a.magasin_id}`));
+        const docs = await Promise.all(refs.map(r=>tx.get(r)));
+        docs.forEach((d,i)=>{
+          const l = a.lignes[i];
+          const current = d.exists?(d.data().quantite||0):0;
+          tx.set(refs[i], {produit_id:l.produit_id, magasin_id:a.magasin_id, quantite: current+l.quantite}, {merge:true});
+        });
+        tx.update(db.collection('achats').doc(id), {statut:'recu', date_reception: firebase.firestore.FieldValue.serverTimestamp()});
+      });
+      const now = firebase.firestore.FieldValue.serverTimestamp();
+      const batch = db.batch();
+      a.lignes.forEach(l=>{
+        batch.set(db.collection('mouvements_stock').doc(), { produit_id:l.produit_id, magasin_id:a.magasin_id, type:'achat_entree',
+          quantite:l.quantite, motif:'Réception commande fournisseur', date: now, user: AppState.user.email });
+      });
+      await batch.commit();
+      Toast.show('Réception enregistrée, stock mis à jour','success');
+      Pages.achats();
+    }catch(err){ console.error(err); Toast.show('Erreur : '+err.message,'danger'); }
+    finally{ hideSpinner(); }
+  },
+
   // ---------------- POINTS DE VENTE ----------------
   async pointsVente(){
     showSpinner();
@@ -1025,6 +1434,134 @@ const Pages = {
       document.getElementById('ventesTotalRow').textContent = `Total affiché : ${fmtGNF(total)} (${rows.length} vente(s) — 200 dernières ventes analysées)`;
     }catch(err){ console.error(err); Toast.show('Erreur : '+err.message,'danger'); }
     finally{ hideSpinner(); }
+  },
+
+  // ---------------- RAPPORTS & STATISTIQUES ----------------
+  async rapports(){
+    showSpinner();
+    const content=document.getElementById('pageContent');
+    const {s:defFrom} = (()=>{ const d=new Date(); d.setDate(d.getDate()-29); d.setHours(0,0,0,0); return {s:d}; })();
+    const defFromStr = defFrom.toISOString().slice(0,10);
+    const defToStr = new Date().toISOString().slice(0,10);
+    content.innerHTML = `
+      <div class="d-flex flex-wrap align-items-end gap-2 mb-3">
+        <div><label class="form-label small fw-semibold mb-1">Du</label><input type="date" id="rpFrom" class="form-control form-control-sm" value="${defFromStr}"></div>
+        <div><label class="form-label small fw-semibold mb-1">Au</label><input type="date" id="rpTo" class="form-control form-control-sm" value="${defToStr}"></div>
+        <div><label class="form-label small fw-semibold mb-1">Magasin</label><select id="rpStore" class="form-select form-select-sm" style="width:200px;"><option value="">Tous les magasins</option></select></div>
+        <button class="btn btn-navy btn-sm" onclick="Pages.generateReport()"><i class="fa-solid fa-filter me-1"></i>Générer</button>
+        <button class="btn btn-icon" style="width:auto;padding:0 12px;" onclick="Pages.exportReportCsv()" title="Exporter en CSV"><i class="fa-solid fa-file-arrow-down me-1"></i>CSV</button>
+      </div>
+      <div class="row g-3" id="rpKpiRow"></div>
+      <div class="row g-3 mt-1">
+        <div class="col-lg-8"><div class="section-card"><h6>Chiffre d'affaires sur la période</h6><canvas id="rpChart" height="95"></canvas></div></div>
+        <div class="col-lg-4"><div class="section-card"><h6>Répartition par mode de paiement</h6><div id="rpPaymentList"></div></div></div>
+      </div>
+      <div class="section-card mt-1"><h6>Top produits vendus</h6><div class="table-responsive"><table class="gc-table">
+        <thead><tr><th>Produit</th><th class="text-end">Qté vendue</th><th class="text-end">Chiffre d'affaires</th></tr></thead>
+        <tbody id="rpTopProductsBody"><tr><td colspan="3" class="text-center py-4 text-muted">Chargement...</td></tr></tbody>
+      </table></div></div>`;
+    const storesSnap = await db.collection('points_vente').orderBy('nom').get();
+    AppState.stores = storesSnap.docs.map(d=>({id:d.id,...d.data()}));
+    document.getElementById('rpStore').innerHTML += AppState.stores.map(s=>`<option value="${s.id}">${s.nom}</option>`).join('');
+    await Pages.generateReport();
+  },
+
+  async generateReport(){
+    showSpinner();
+    try{
+      if(!AppState.products.length){ const p=await db.collection('catalogue').get(); AppState.products=p.docs.map(d=>({id:d.id,...d.data()})); }
+      const from = document.getElementById('rpFrom').value;
+      const to = document.getElementById('rpTo').value;
+      const storeId = document.getElementById('rpStore').value;
+      const fromDate = from ? new Date(from+'T00:00:00') : null;
+      const toDate = to ? new Date(to+'T23:59:59') : null;
+
+      const [ventesSnap, lignesSnap] = await Promise.all([
+        db.collection('ventes').orderBy('date','desc').limit(500).get(),
+        db.collection('lignes_ventes').limit(3000).get()
+      ]);
+      let ventes = ventesSnap.docs.map(d=>({id:d.id,...d.data()}));
+      ventes = ventes.filter(v=>{
+        const d = tsToDate(v.date);
+        if(fromDate && d<fromDate) return false;
+        if(toDate && d>toDate) return false;
+        if(storeId && v.magasin_id!==storeId) return false;
+        return true;
+      });
+      const venteIds = new Set(ventes.map(v=>v.id));
+      const lignes = lignesSnap.docs.map(d=>d.data()).filter(l=>venteIds.has(l.vente_id));
+
+      const totalCA = ventes.reduce((s,v)=>s+(v.total||0),0);
+      const nbVentes = ventes.length;
+      const panierMoyen = nbVentes ? totalCA/nbVentes : 0;
+      let margeEstimee = 0;
+      lignes.forEach(l=>{
+        const p = AppState.products.find(p=>p.id===l.produit_id);
+        const cout = p ? (p.cout||0) : 0;
+        margeEstimee += (l.prix_unitaire-cout)*l.quantite;
+      });
+
+      Pages._lastReport = { ventes, lignes, totalCA, nbVentes, panierMoyen, margeEstimee, from, to };
+
+      document.getElementById('rpKpiRow').innerHTML =
+        kpiCard('fa-sack-dollar','#1a9e6d', fmtGNF(totalCA), 'Chiffre d\u2019affaires') +
+        kpiCard('fa-receipt','#173868', nbVentes, 'Transactions') +
+        kpiCard('fa-basket-shopping','#f5941f', fmtGNF(panierMoyen), 'Panier moyen') +
+        kpiCard('fa-chart-simple','#6f83a0', fmtGNF(margeEstimee), 'Marge estimée');
+
+      // Paiements
+      const byPayment = {};
+      ventes.forEach(v=>{ const key=v.mode_paiement||'Non précisé'; byPayment[key]=(byPayment[key]||0)+(v.total||0); });
+      const payKeys = Object.keys(byPayment);
+      document.getElementById('rpPaymentList').innerHTML = payKeys.length ? payKeys.map(k=>`
+        <div class="d-flex justify-content-between align-items-center py-2" style="border-bottom:1px solid var(--border);">
+          <span class="badge-soft bg-soft-navy">${k}</span><span class="fw-semibold">${fmtGNF(byPayment[k])}</span>
+        </div>`).join('') : `<div class="empty-state"><i class="fa-solid fa-circle-info"></i><div>Aucune donnée</div></div>`;
+
+      // Top produits
+      const byProduct = {};
+      lignes.forEach(l=>{
+        if(!byProduct[l.produit_id]) byProduct[l.produit_id] = {nom:l.produit_nom, qty:0, ca:0};
+        byProduct[l.produit_id].qty += l.quantite||0;
+        byProduct[l.produit_id].ca += l.sous_total||(l.prix_unitaire*l.quantite)||0;
+      });
+      const topProducts = Object.values(byProduct).sort((a,b)=>b.ca-a.ca).slice(0,10);
+      document.getElementById('rpTopProductsBody').innerHTML = topProducts.length ? topProducts.map(p=>`
+        <tr><td style="font-weight:600;">${p.nom}</td><td class="text-end">${p.qty}</td><td class="text-end">${fmtGNF(p.ca)}</td></tr>`).join('')
+        : `<tr><td colspan="3" class="text-center py-4 text-muted">Aucune vente sur la période</td></tr>`;
+
+      // Graphique CA par jour
+      const dayKeys=[]; const byDay={};
+      if(fromDate && toDate){
+        const cursor = new Date(fromDate);
+        while(cursor<=toDate){ const key=cursor.toDateString(); dayKeys.push(new Date(cursor)); byDay[key]=0; cursor.setDate(cursor.getDate()+1); }
+      }
+      ventes.forEach(v=>{ const d=tsToDate(v.date); d.setHours(0,0,0,0); const key=d.toDateString(); if(byDay[key]!==undefined) byDay[key]+=(v.total||0); });
+      const labels = dayKeys.map(d=>d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'}));
+      const dataVals = dayKeys.map(d=>byDay[d.toDateString()]||0);
+      if(window._rpChart) window._rpChart.destroy();
+      window._rpChart = new Chart(document.getElementById('rpChart'), {
+        type:'bar',
+        data:{ labels, datasets:[{ label:'CA (GNF)', data:dataVals, backgroundColor:'#f5941f', borderRadius:6 }]},
+        options:{ plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}} }
+      });
+    }catch(err){ console.error(err); Toast.show('Erreur rapport : '+err.message,'danger'); }
+    finally{ hideSpinner(); }
+  },
+
+  exportReportCsv(){
+    const r = Pages._lastReport;
+    if(!r || !r.ventes.length){ Toast.show('Générez un rapport avant d\u2019exporter','danger'); return; }
+    let csv = 'Date;Magasin;Caissier;Paiement;Montant\n';
+    r.ventes.forEach(v=>{
+      const store = AppState.stores.find(s=>s.id===v.magasin_id);
+      csv += `${fmtDate(tsToDate(v.date))};${store?store.nom:''};${v.caissier_nom||''};${v.mode_paiement||''};${Math.round(v.total||0)}\n`;
+    });
+    const blob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8;'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `rapport_ventes_${r.from||'debut'}_${r.to||'fin'}.csv`;
+    a.click();
   },
 
   // ---------------- CLIENTS ----------------

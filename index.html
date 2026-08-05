@@ -157,20 +157,16 @@ kbd{background:#eef2f8;color:var(--navy2);border:1px solid #d6dee9;border-radius
     <div id="loginError" class="alert alert-danger py-2 small" style="display:none;"></div>
     <form id="loginForm">
       <div class="mb-3">
-        <label class="form-label small fw-semibold">Adresse e-mail</label>
-        <input type="email" class="form-control" id="loginEmail" required placeholder="nom@entreprise.com">
+        <label class="form-label small fw-semibold">Nom d'utilisateur</label>
+        <input type="text" class="form-control" id="loginUsername" required placeholder="ex : mamadou" autocomplete="username">
       </div>
       <div class="mb-3">
-        <label class="form-label small fw-semibold">Mot de passe</label>
-        <input type="password" class="form-control" id="loginPassword" required placeholder="••••••••">
+        <label class="form-label small fw-semibold">Code PIN</label>
+        <input type="password" inputmode="numeric" pattern="[0-9]*" class="form-control text-center" id="loginPin" required minlength="4" maxlength="8" placeholder="••••" autocomplete="current-password" style="letter-spacing:6px;font-size:20px;">
       </div>
       <button type="submit" class="btn btn-brand w-100 mt-2">Se connecter</button>
     </form>
     <p class="login-hint">Connexion sécurisée · Firebase Authentication</p>
-    <div class="demo-hint">
-      <i class="fa-solid fa-circle-info me-1"></i>Accès démo :
-      <b>admin@djalonka.com</b> / <b>Djalonka2026</b>
-    </div>
   </div>
 </div>
 
@@ -228,7 +224,74 @@ const firebaseConfig = {
   appId: "REMPLACE_MOI"
 };
 firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+// ==================================================================
+// AUTHENTIFICATION — Nom d'utilisateur + PIN
+// Chaque employé a un compte Firebase Auth (email technique + PIN
+// comme mot de passe) et un document dans la collection "employees"
+// qui fait le lien entre son nom d'utilisateur et cet email.
+//
+// Pour créer un employé :
+//   1. Firebase Console > Authentication > Ajouter un utilisateur
+//      Email : ex. "mamadou@djalonka.local"   Mot de passe : le PIN (min. 6 caractères pour Firebase Auth)
+//   2. Firestore > collection "employees" > ajouter un document :
+//      { username: "mamadou", email: "mamadou@djalonka.local", nom: "Mamadou Diallo" }
+// ==================================================================
+const Auth = {
+  async login(username, pin){
+    const errBox = document.getElementById('loginError');
+    errBox.style.display = 'none';
+    Auth._spinner(true);
+    try{
+      username = username.trim().toLowerCase();
+      const snap = await db.collection('employees').where('username','==',username).limit(1).get();
+      if(snap.empty){
+        throw { code:'app/user-not-found' };
+      }
+      const emp = snap.docs[0].data();
+      await auth.signInWithEmailAndPassword(emp.email, pin);
+    }catch(e){
+      let msg = "Nom d'utilisateur ou PIN incorrect.";
+      if(e && e.code === 'app/user-not-found') msg = "Nom d'utilisateur inconnu.";
+      errBox.textContent = msg;
+      errBox.style.display = 'block';
+    }finally{
+      Auth._spinner(false);
+    }
+  },
+  logout(){
+    auth.signOut();
+  },
+  _spinner(show){
+    document.getElementById('spinnerOverlay').style.display = show ? 'flex' : 'none';
+  }
+};
+
+document.getElementById('loginForm').addEventListener('submit', function(e){
+  e.preventDefault();
+  const username = document.getElementById('loginUsername').value;
+  const pin = document.getElementById('loginPin').value;
+  Auth.login(username, pin);
+});
+
+auth.onAuthStateChanged(function(user){
+  const loginScreen = document.getElementById('loginScreen');
+  const appShell = document.getElementById('appShell');
+  if(user){
+    loginScreen.style.display = 'none';
+    appShell.style.display = 'flex';
+    document.getElementById('userLabel').textContent = user.email;
+  }else{
+    appShell.style.display = 'none';
+    loginScreen.style.display = 'flex';
+    document.getElementById('loginForm').reset();
+  }
+});
+
+// Stub minimal pour éviter une erreur JS tant que les raccourcis clavier ne sont pas développés
+const Shortcuts = { showHelp(){ /* à implémenter */ } };
 </script>
-<script src="app.js"></script>
 </body>
 </html>

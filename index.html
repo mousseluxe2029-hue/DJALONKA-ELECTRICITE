@@ -167,6 +167,10 @@ kbd{background:#eef2f8;color:var(--navy2);border:1px solid #d6dee9;border-radius
       <button type="submit" class="btn btn-brand w-100 mt-2">Se connecter</button>
     </form>
     <p class="login-hint">Connexion sécurisée · Firebase Authentication</p>
+    <div class="demo-hint">
+      <i class="fa-solid fa-circle-info me-1"></i>
+      Premier lancement ? <a href="#" id="bootstrapAdminLink" onclick="Auth.bootstrapAdmin();return false;">Créer le compte admin par défaut</a>
+    </div>
   </div>
 </div>
 
@@ -216,12 +220,12 @@ kbd{background:#eef2f8;color:var(--navy2);border:1px solid #d6dee9;border-radius
 // ces valeurs.
 // ==================================================================
 const firebaseConfig = {
-  apiKey: "REMPLACE_MOI",
-  authDomain: "REMPLACE_MOI.firebaseapp.com",
-  projectId: "REMPLACE_MOI",
-  storageBucket: "REMPLACE_MOI.appspot.com",
-  messagingSenderId: "REMPLACE_MOI",
-  appId: "REMPLACE_MOI"
+  apiKey: "AIzaSyC8WFVHpgoazJzaR7tBbAj1zi0kbpHr8zY",
+  authDomain: "djalonka-electronic.firebaseapp.com",
+  projectId: "djalonka-electronic",
+  storageBucket: "djalonka-electronic.firebasestorage.app",
+  messagingSenderId: "43431196412",
+  appId: "1:43431196412:web:6a4f3ef222f8ef1f3f4979"
 };
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
@@ -263,6 +267,38 @@ const Auth = {
   },
   logout(){
     auth.signOut();
+  },
+  async bootstrapAdmin(){
+    const errBox = document.getElementById('loginError');
+    errBox.style.display = 'none';
+    Auth._spinner(true);
+    try{
+      const existing = await db.collection('employees').where('username','==','admin').limit(1).get();
+      if(!existing.empty){
+        throw { code:'app/already-exists' };
+      }
+      const defaultEmail = 'admin@djalonka.local';
+      const defaultPin = '123456';
+      await auth.createUserWithEmailAndPassword(defaultEmail, defaultPin);
+      await db.collection('employees').doc(auth.currentUser.uid).set({
+        username: 'admin',
+        email: defaultEmail,
+        nom: 'Administrateur'
+      });
+      errBox.className = 'alert alert-success py-2 small';
+      errBox.textContent = "Compte créé. Identifiant : admin — PIN : 123456. Connectez-vous, puis pensez à changer ce PIN.";
+      errBox.style.display = 'block';
+      await auth.signOut();
+    }catch(e){
+      let msg = "Impossible de créer le compte admin.";
+      if(e && e.code === 'app/already-exists') msg = "Un compte admin existe déjà.";
+      if(e && e.code === 'auth/email-already-in-use') msg = "Un compte admin existe déjà.";
+      errBox.className = 'alert alert-danger py-2 small';
+      errBox.textContent = msg;
+      errBox.style.display = 'block';
+    }finally{
+      Auth._spinner(false);
+    }
   },
   _spinner(show){
     document.getElementById('spinnerOverlay').style.display = show ? 'flex' : 'none';

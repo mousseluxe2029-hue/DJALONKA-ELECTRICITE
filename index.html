@@ -147,6 +147,13 @@ kbd{background:#eef2f8;color:var(--navy2);border:1px solid #d6dee9;border-radius
 
 <div class="toast-wrap" id="toastWrap"></div>
 
+<!-- ================= MODAL GÉNÉRIQUE (formulaires) ================= -->
+<div class="modal fade" id="appModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered" id="appModalDialog">
+    <div class="modal-content" id="appModalContent"></div>
+  </div>
+</div>
+
 <!-- ================= LOGIN ================= -->
 <div id="loginScreen">
   <div class="login-card">
@@ -211,6 +218,7 @@ kbd{background:#eef2f8;color:var(--navy2);border:1px solid #d6dee9;border-radius
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
 // ==================================================================
 // CONFIGURATION FIREBASE — remplace ces valeurs par celles de TON
@@ -315,22 +323,840 @@ document.getElementById('loginForm').addEventListener('submit', function(e){
   Auth.login(username, pin);
 });
 
-auth.onAuthStateChanged(function(user){
+// ==================================================================
+// ÉTAT GLOBAL DE L'APPLICATION
+// ==================================================================
+const AppState = {
+  user: null,
+  employee: null,
+  role: 'admin',        // admin | directeur | responsable | caissier | agent
+  stores: [],
+  currentStoreId: null,
+  categories: [],
+  products: [],
+  clients: [],
+  posStock: {},
+  cart: [],
+  currentPage: 'dashboard'
+};
+
+// Menu de navigation. "adminOnly" masque l'item pour les rôles non-admin.
+// "soon" affiche un badge "Bientôt" et ouvre un écran de type "à venir"
+// (modules prévus au cahier des charges, à développer dans une prochaine phase).
+const NAV_ITEMS = [
+  { id:'dashboard',     label:'Tableau de bord',        icon:'fa-gauge-high',        section:'Principal' },
+  { id:'pos',           label:'Point de vente',         icon:'fa-cash-register',     section:'Ventes' },
+  { id:'ventes',        label:'Historique des ventes',  icon:'fa-receipt',           section:'Ventes' },
+  { id:'clients',       label:'Clients',                icon:'fa-users',             section:'Ventes' },
+  { id:'catalogue',     label:'Catalogue produits',     icon:'fa-boxes-stacked',     section:'Stock' },
+  { id:'stocks',        label:'Gestion des stocks',     icon:'fa-warehouse',         section:'Stock' },
+  { id:'transferts',    label:'Transferts de stock',    icon:'fa-truck-ramp-box',    section:'Stock', soon:true },
+  { id:'fournisseurs',  label:'Fournisseurs',           icon:'fa-industry',          section:'Achats', soon:true },
+  { id:'achats',        label:'Achats',                 icon:'fa-cart-shopping',     section:'Achats', soon:true },
+  { id:'rapports',      label:'Rapports & statistiques',icon:'fa-chart-line',        section:'Analyse', soon:true },
+  { id:'notifications', label:'Notifications',          icon:'fa-bell',              section:'Analyse', soon:true },
+  { id:'points_vente',  label:'Points de vente',        icon:'fa-store',             section:'Administration', adminOnly:true },
+  { id:'utilisateurs',  label:'Utilisateurs & rôles',   icon:'fa-user-gear',         section:'Administration', adminOnly:true, soon:true },
+  { id:'parametres',    label:'Paramètres',             icon:'fa-gear',              section:'Administration', adminOnly:true, soon:true }
+];
+
+// ==================================================================
+// UTILITAIRES
+// ==================================================================
+function fmtGNF(n){ return Math.round(n||0).toLocaleString('fr-FR') + ' GNF'; }
+function fmtDate(d){ return d ? new Date(d).toLocaleDateString('fr-FR') : '-'; }
+function tsToDate(ts){ return ts && ts.toDate ? ts.toDate() : (ts ? new Date(ts) : new Date()); }
+function todayRange(){ const s=new Date(); s.setHours(0,0,0,0); const e=new Date(); e.setHours(23,59,59,999); return {s,e}; }
+function showSpinner(){ document.getElementById('spinnerOverlay').style.display='flex'; }
+function hideSpinner(){ document.getElementById('spinnerOverlay').style.display='none'; }
+function kpiCard(icon,color,val,lbl){
+  return `<div class="col-6 col-lg-3"><div class="stat-card">
+    <div class="icon mb-2" style="background:${color}"><i class="fa-solid ${icon}"></i></div>
+    <div class="val">${val}</div><div class="lbl">${lbl}</div></div></div>`;
+}
+
+const Toast = {
+  show(msg, type='success'){
+    const icon = type==='success'?'fa-circle-check':(type==='danger'?'fa-circle-exclamation':'fa-circle-info');
+    const bg = type==='success'?'var(--success)':(type==='danger'?'var(--danger)':'var(--navy2)');
+    const el = document.createElement('div');
+    el.className = 'toast align-items-center border-0 show mb-2';
+    el.style.cssText = `background:${bg};color:#fff;border-radius:10px;min-width:260px;`;
+    el.innerHTML = `<div class="d-flex"><div class="toast-body"><i class="fa-solid ${icon} me-2"></i>${msg}</div>
+      <button class="btn-close btn-close-white me-2 m-auto" onclick="this.closest('.toast').remove()"></button></div>`;
+    document.getElementById('toastWrap').appendChild(el);
+    setTimeout(()=>el.remove(), 4500);
+  }
+};
+
+function openModal(title, bodyHtml, size=''){
+  document.getElementById('appModalDialog').className = 'modal-dialog modal-dialog-centered '+size;
+  document.getElementById('appModalContent').innerHTML = `
+    <div class="modal-header"><h5 class="modal-title">${title}</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">${bodyHtml}</div>`;
+  const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('appModal'));
+  modal.show();
+  return modal;
+}
+
+// ==================================================================
+// ROUTEUR
+// ==================================================================
+function buildNavMenu(){
+  const sections = {};
+  NAV_ITEMS.forEach(it=>{
+    if(it.adminOnly && AppState.role!=='admin') return;
+    (sections[it.section] = sections[it.section]||[]).push(it);
+  });
+  let html='';
+  Object.keys(sections).forEach(sec=>{
+    html += `<div class="nav-section-title">${sec}</div>`;
+    sections[sec].forEach(it=>{
+      html += `<a href="#" class="nav-link" data-page="${it.id}" onclick="Router.go('${it.id}');return false;">
+        <i class="fa-solid ${it.icon}"></i> ${it.label}
+        ${it.soon?'<span class="badge-count" style="background:#6f83a0;">Bientôt</span>':''}
+      </a>`;
+    });
+  });
+  document.getElementById('navMenu').innerHTML = html;
+}
+
+const Router = {
+  go(pageId){
+    AppState.currentPage = pageId;
+    document.querySelectorAll('.sidebar .nav-link').forEach(a=>a.classList.toggle('active', a.dataset.page===pageId));
+    const item = NAV_ITEMS.find(i=>i.id===pageId);
+    document.getElementById('pageTitle').textContent = item ? item.label : '';
+    document.getElementById('sidebar').classList.remove('show');
+    if(item && item.soon){ Pages.comingSoon(pageId); return; }
+    const renderers = {
+      dashboard: ()=>Pages.dashboard(),
+      pos: ()=>Pages.pos(),
+      ventes: ()=>Pages.ventesHistory(),
+      clients: ()=>Pages.clients(),
+      catalogue: ()=>Pages.catalogue(),
+      stocks: ()=>Pages.stocks(),
+      points_vente: ()=>Pages.pointsVente()
+    };
+    (renderers[pageId] || (()=>Pages.comingSoon(pageId)))();
+  }
+};
+
+// ==================================================================
+// PAGES DE L'APPLICATION
+// ==================================================================
+const Pages = {
+
+  comingSoon(pageId){
+    const item = NAV_ITEMS.find(i=>i.id===pageId);
+    document.getElementById('pageContent').innerHTML = `<div class="empty-state" style="padding:70px 10px;">
+      <i class="fa-solid fa-hammer"></i>
+      <div style="font-size:16px;font-weight:700;color:var(--navy);margin-bottom:6px;">${item?item.label:'Module'}</div>
+      <div>Ce module fait partie du cahier des charges et sera développé dans une prochaine phase.</div>
+    </div>`;
+  },
+
+  // ---------------- TABLEAU DE BORD ----------------
+  async dashboard(){
+    showSpinner();
+    const content = document.getElementById('pageContent');
+    content.innerHTML = `
+      <div class="row g-3" id="kpiRow"></div>
+      <div class="row g-3 mt-1">
+        <div class="col-lg-8"><div class="section-card"><h6>Ventes des 7 derniers jours</h6><canvas id="salesChart" height="95"></canvas></div></div>
+        <div class="col-lg-4"><div class="section-card"><h6>Alertes de stock faible</h6><div id="lowStockList"></div></div></div>
+      </div>
+      <div class="section-card mt-1"><h6>Dernières ventes</h6><div class="table-responsive"><table class="gc-table">
+        <thead><tr><th>Date</th><th>Magasin</th><th>Caissier</th><th>Paiement</th><th class="text-end">Montant</th></tr></thead>
+        <tbody id="recentSalesBody"><tr><td colspan="5" class="text-center py-4 text-muted">Chargement...</td></tr></tbody>
+      </table></div></div>`;
+    try{
+      const [storesSnap, productsSnap, stocksSnap] = await Promise.all([
+        db.collection('points_vente').get(),
+        db.collection('catalogue').get(),
+        db.collection('stocks').get()
+      ]);
+      AppState.stores = storesSnap.docs.map(d=>({id:d.id, ...d.data()}));
+      AppState.products = productsSnap.docs.map(d=>({id:d.id, ...d.data()}));
+
+      const lowStock = stocksSnap.docs.map(d=>({id:d.id,...d.data()})).filter(s=>{
+        const p = AppState.products.find(p=>p.id===s.produit_id);
+        return p && typeof p.stock_min==='number' && (s.quantite||0)<=p.stock_min;
+      });
+
+      const {s,e} = todayRange();
+      const todaySalesSnap = await db.collection('ventes').where('date','>=',s).where('date','<=',e).get();
+      let todayTotal=0; todaySalesSnap.forEach(d=>todayTotal+=(d.data().total||0));
+
+      const recentSnap = await db.collection('ventes').orderBy('date','desc').limit(8).get();
+
+      document.getElementById('kpiRow').innerHTML =
+        kpiCard('fa-sack-dollar','#1a9e6d', fmtGNF(todayTotal), 'Ventes du jour') +
+        kpiCard('fa-receipt','#173868', todaySalesSnap.size, 'Transactions du jour') +
+        kpiCard('fa-boxes-stacked','#f5941f', AppState.products.length, 'Produits au catalogue') +
+        kpiCard('fa-triangle-exclamation','#e5484d', lowStock.length, 'Alertes stock faible');
+
+      document.getElementById('lowStockList').innerHTML = lowStock.length ? lowStock.slice(0,8).map(s=>{
+        const p = AppState.products.find(p=>p.id===s.produit_id);
+        const store = AppState.stores.find(st=>st.id===s.magasin_id);
+        return `<div class="d-flex justify-content-between align-items-center py-2" style="border-bottom:1px solid var(--border);">
+          <div><div style="font-weight:600;font-size:13px;">${p?p.nom:'Produit'}</div><div class="small text-muted">${store?store.nom:''}</div></div>
+          <span class="badge-soft bg-soft-danger">${s.quantite||0} restant</span>
+        </div>`;
+      }).join('') : `<div class="empty-state"><i class="fa-solid fa-circle-check"></i><div>Aucune alerte</div></div>`;
+
+      document.getElementById('recentSalesBody').innerHTML = recentSnap.empty ? `<tr><td colspan="5" class="text-center text-muted py-4">Aucune vente enregistrée</td></tr>` :
+        recentSnap.docs.map(d=>{
+          const v=d.data();
+          const store = AppState.stores.find(st=>st.id===v.magasin_id);
+          return `<tr><td>${fmtDate(tsToDate(v.date))}</td><td>${store?store.nom:'-'}</td><td>${v.caissier_nom||'-'}</td>
+            <td><span class="badge-soft bg-soft-navy">${v.mode_paiement||'-'}</span></td><td class="text-end fw-semibold">${fmtGNF(v.total)}</td></tr>`;
+        }).join('');
+
+      // Graphique des 7 derniers jours
+      const days=[]; for(let i=6;i>=0;i--){ const d=new Date(); d.setDate(d.getDate()-i); d.setHours(0,0,0,0); days.push(d); }
+      const byDay={}; days.forEach(d=>byDay[d.toDateString()]=0);
+      const weekSnap = await db.collection('ventes').where('date','>=',days[0]).get();
+      weekSnap.forEach(doc=>{ const v=doc.data(); const dd=tsToDate(v.date); dd.setHours(0,0,0,0);
+        if(byDay[dd.toDateString()]!==undefined) byDay[dd.toDateString()]+=(v.total||0); });
+      const labels = days.map(d=>d.toLocaleDateString('fr-FR',{weekday:'short',day:'numeric'}));
+      const dataVals = days.map(d=>byDay[d.toDateString()]);
+      if(window._salesChart) window._salesChart.destroy();
+      window._salesChart = new Chart(document.getElementById('salesChart'), {
+        type:'bar',
+        data:{ labels, datasets:[{ label:'Ventes (GNF)', data:dataVals, backgroundColor:'#f5941f', borderRadius:6 }]},
+        options:{ plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}} }
+      });
+    }catch(err){
+      console.error(err);
+      Toast.show("Erreur lors du chargement du tableau de bord : "+err.message,'danger');
+    }finally{ hideSpinner(); }
+  },
+
+  // ---------------- CATALOGUE PRODUITS ----------------
+  async catalogue(){
+    showSpinner();
+    const content=document.getElementById('pageContent');
+    content.innerHTML = `
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <div class="d-flex gap-2 flex-wrap">
+          <input type="text" id="catSearch" class="form-control form-control-sm" style="width:220px;" placeholder="Rechercher un produit...">
+          <select id="catFilterCategorie" class="form-select form-select-sm" style="width:180px;"><option value="">Toutes catégories</option></select>
+        </div>
+        <button class="btn btn-brand btn-sm" onclick="Pages.openProductModal()"><i class="fa-solid fa-plus me-1"></i>Nouveau produit</button>
+      </div>
+      <div class="section-card">
+        <div class="table-responsive"><table class="gc-table">
+          <thead><tr><th></th><th>Produit</th><th>Catégorie</th><th class="text-end">Prix</th><th class="text-end">Stock total</th><th></th></tr></thead>
+          <tbody id="catalogueBody"><tr><td colspan="6" class="text-center py-4 text-muted">Chargement...</td></tr></tbody>
+        </table></div>
+      </div>`;
+    try{
+      const [catsSnap, prodSnap, stocksSnap] = await Promise.all([
+        db.collection('categories').orderBy('nom').get(),
+        db.collection('catalogue').orderBy('nom').get(),
+        db.collection('stocks').get()
+      ]);
+      AppState.categories = catsSnap.docs.map(d=>({id:d.id,...d.data()}));
+      AppState.products = prodSnap.docs.map(d=>({id:d.id,...d.data()}));
+      const stockByProduct = {};
+      stocksSnap.forEach(d=>{ const s=d.data(); stockByProduct[s.produit_id]=(stockByProduct[s.produit_id]||0)+(s.quantite||0); });
+
+      document.getElementById('catFilterCategorie').innerHTML =
+        '<option value="">Toutes catégories</option>'+AppState.categories.map(c=>`<option value="${c.id}">${c.nom}</option>`).join('');
+
+      const renderRows = ()=>{
+        const q=(document.getElementById('catSearch').value||'').toLowerCase();
+        const catId=document.getElementById('catFilterCategorie').value;
+        const rows = AppState.products.filter(p=>{
+          const matchQ = !q || (p.nom||'').toLowerCase().includes(q);
+          const matchCat = !catId || p.categorie_id===catId;
+          return matchQ && matchCat;
+        });
+        const body=document.getElementById('catalogueBody');
+        if(!rows.length){ body.innerHTML=`<tr><td colspan="6" class="text-center py-4 text-muted">Aucun produit trouvé</td></tr>`; return; }
+        body.innerHTML = rows.map(p=>{
+          const cat = AppState.categories.find(c=>c.id===p.categorie_id);
+          const stock = stockByProduct[p.id]||0;
+          const low = typeof p.stock_min==='number' && stock<=p.stock_min;
+          return `<tr>
+            <td><div style="width:38px;height:38px;border-radius:8px;overflow:hidden;background:#f2f5f9;display:flex;align-items:center;justify-content:center;">
+              ${p.photo_url?`<img src="${p.photo_url}" style="width:100%;height:100%;object-fit:cover;">`:'<i class="fa-solid fa-image text-muted"></i>'}</div></td>
+            <td><div style="font-weight:600;">${p.nom}</div><div class="small text-muted">${p.reference||''}</div></td>
+            <td>${cat?cat.nom:'-'}</td>
+            <td class="text-end">${fmtGNF(p.prix)}</td>
+            <td class="text-end"><span class="badge-soft ${low?'bg-soft-danger':'bg-soft-success'}">${stock}</span></td>
+            <td class="text-end">
+              <button class="btn-icon" onclick="Pages.openProductModal('${p.id}')" title="Modifier"><i class="fa-solid fa-pen"></i></button>
+              <button class="btn-icon" onclick="Pages.deleteProduct('${p.id}')" title="Supprimer"><i class="fa-solid fa-trash"></i></button>
+            </td>
+          </tr>`;
+        }).join('');
+      };
+      document.getElementById('catSearch').addEventListener('input', renderRows);
+      document.getElementById('catFilterCategorie').addEventListener('change', renderRows);
+      renderRows();
+    }catch(err){ console.error(err); Toast.show('Erreur catalogue : '+err.message,'danger'); }
+    finally{ hideSpinner(); }
+  },
+
+  async openProductModal(id){
+    if(!AppState.categories.length){ const c=await db.collection('categories').get(); AppState.categories=c.docs.map(d=>({id:d.id,...d.data()})); }
+    let p = { nom:'', reference:'', categorie_id:'', prix:'', cout:'', stock_min:'', description:'', photo_url:'' };
+    if(id){ const doc=await db.collection('catalogue').doc(id).get(); p={id, ...doc.data()}; }
+    const body = `<form id="productForm">
+      <div class="mb-3"><label class="form-label small fw-semibold">Nom du produit</label><input id="pNom" class="form-control" value="${p.nom||''}" required></div>
+      <div class="row g-2 mb-3">
+        <div class="col-6"><label class="form-label small fw-semibold">Référence</label><input id="pRef" class="form-control" value="${p.reference||''}"></div>
+        <div class="col-6"><label class="form-label small fw-semibold">Catégorie</label>
+          <select id="pCat" class="form-select"><option value="">—</option>${AppState.categories.map(c=>`<option value="${c.id}" ${c.id===p.categorie_id?'selected':''}>${c.nom}</option>`).join('')}</select></div>
+      </div>
+      <div class="row g-2 mb-3">
+        <div class="col-4"><label class="form-label small fw-semibold">Prix de vente</label><input type="number" id="pPrix" class="form-control" value="${p.prix||''}" required></div>
+        <div class="col-4"><label class="form-label small fw-semibold">Coût d'achat</label><input type="number" id="pCout" class="form-control" value="${p.cout||''}"></div>
+        <div class="col-4"><label class="form-label small fw-semibold">Seuil min.</label><input type="number" id="pMin" class="form-control" value="${p.stock_min??''}"></div>
+      </div>
+      <div class="mb-3"><label class="form-label small fw-semibold">URL Photo</label><input id="pPhoto" class="form-control" value="${p.photo_url||''}" placeholder="https://..."></div>
+      <div class="mb-3"><label class="form-label small fw-semibold">Description / fiche technique</label><textarea id="pDesc" class="form-control" rows="3">${p.description||''}</textarea></div>
+      <button type="submit" class="btn btn-brand w-100">${id?'Enregistrer les modifications':'Créer le produit'}</button>
+    </form>`;
+    const modal = openModal(id?'Modifier le produit':'Nouveau produit', body);
+    document.getElementById('productForm').addEventListener('submit', async e=>{
+      e.preventDefault();
+      await Pages.saveProduct(id, {
+        nom: document.getElementById('pNom').value.trim(),
+        reference: document.getElementById('pRef').value.trim(),
+        categorie_id: document.getElementById('pCat').value,
+        prix: parseFloat(document.getElementById('pPrix').value)||0,
+        cout: parseFloat(document.getElementById('pCout').value)||0,
+        stock_min: document.getElementById('pMin').value===''? null : parseInt(document.getElementById('pMin').value,10),
+        photo_url: document.getElementById('pPhoto').value.trim(),
+        description: document.getElementById('pDesc').value.trim()
+      });
+      modal.hide();
+    });
+  },
+
+  async saveProduct(id, data){
+    showSpinner();
+    try{
+      if(id) await db.collection('catalogue').doc(id).update(data);
+      else await db.collection('catalogue').add(data);
+      Toast.show('Produit enregistré','success');
+      Pages.catalogue();
+    }catch(err){ console.error(err); Toast.show('Erreur : '+err.message,'danger'); }
+    finally{ hideSpinner(); }
+  },
+
+  async deleteProduct(id){
+    if(!confirm('Supprimer ce produit ? Cette action est irréversible.')) return;
+    showSpinner();
+    try{ await db.collection('catalogue').doc(id).delete(); Toast.show('Produit supprimé','success'); Pages.catalogue(); }
+    catch(err){ Toast.show('Erreur : '+err.message,'danger'); }
+    finally{ hideSpinner(); }
+  },
+
+  // ---------------- GESTION DES STOCKS ----------------
+  async stocks(){
+    showSpinner();
+    const content=document.getElementById('pageContent');
+    content.innerHTML = `
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <select id="stockStoreFilter" class="form-select form-select-sm" style="width:220px;"></select>
+        <button class="btn btn-brand btn-sm" onclick="Pages.openStockMovementModal()"><i class="fa-solid fa-right-left me-1"></i>Nouveau mouvement</button>
+      </div>
+      <div class="section-card"><div class="table-responsive"><table class="gc-table">
+        <thead><tr><th>Produit</th><th>Magasin</th><th class="text-end">Quantité</th><th class="text-end">Seuil min.</th><th>État</th></tr></thead>
+        <tbody id="stocksBody"><tr><td colspan="5" class="text-center py-4 text-muted">Chargement...</td></tr></tbody>
+      </table></div></div>`;
+    try{
+      const [stocksSnap, prodSnap, storesSnap] = await Promise.all([
+        db.collection('stocks').get(), db.collection('catalogue').get(), db.collection('points_vente').orderBy('nom').get()
+      ]);
+      AppState.products = prodSnap.docs.map(d=>({id:d.id,...d.data()}));
+      AppState.stores = storesSnap.docs.map(d=>({id:d.id,...d.data()}));
+      const allStocks = stocksSnap.docs.map(d=>({id:d.id,...d.data()}));
+      const sel=document.getElementById('stockStoreFilter');
+      sel.innerHTML = '<option value="">Tous les magasins</option>'+AppState.stores.map(s=>`<option value="${s.id}">${s.nom}</option>`).join('');
+      const render = ()=>{
+        const storeId = sel.value;
+        const rows = allStocks.filter(s=>!storeId || s.magasin_id===storeId);
+        document.getElementById('stocksBody').innerHTML = rows.length ? rows.map(s=>{
+          const p = AppState.products.find(p=>p.id===s.produit_id);
+          const st = AppState.stores.find(st=>st.id===s.magasin_id);
+          const min = p?p.stock_min:null;
+          const low = typeof min==='number' && (s.quantite||0)<=min;
+          return `<tr><td style="font-weight:600;">${p?p.nom:'Produit supprimé'}</td><td>${st?st.nom:'-'}</td>
+          <td class="text-end">${s.quantite||0}</td><td class="text-end">${min??'-'}</td>
+          <td>${low?'<span class="badge-soft bg-soft-danger">Rupture proche</span>':'<span class="badge-soft bg-soft-success">OK</span>'}</td></tr>`;
+        }).join('') : `<tr><td colspan="5" class="text-center py-4 text-muted">Aucun stock enregistré</td></tr>`;
+      };
+      sel.addEventListener('change', render);
+      render();
+    }catch(err){ console.error(err); Toast.show('Erreur stocks : '+err.message,'danger'); }
+    finally{ hideSpinner(); }
+  },
+
+  async openStockMovementModal(){
+    if(!AppState.stores.length){ const s = await db.collection('points_vente').get(); AppState.stores=s.docs.map(d=>({id:d.id,...d.data()})); }
+    if(!AppState.products.length){ const p = await db.collection('catalogue').get(); AppState.products=p.docs.map(d=>({id:d.id,...d.data()})); }
+    if(!AppState.stores.length || !AppState.products.length){
+      Toast.show("Créez d'abord un magasin et au moins un produit.", 'danger'); return;
+    }
+    const body = `<form id="stockMoveForm">
+      <div class="mb-3"><label class="form-label small fw-semibold">Type de mouvement</label>
+        <select id="mvType" class="form-select">
+          <option value="entree">Entrée de stock</option>
+          <option value="sortie">Sortie de stock</option>
+          <option value="ajustement">Ajustement (valeur exacte)</option>
+        </select></div>
+      <div class="mb-3"><label class="form-label small fw-semibold">Magasin</label>
+        <select id="mvStore" class="form-select">${AppState.stores.map(s=>`<option value="${s.id}">${s.nom}</option>`).join('')}</select></div>
+      <div class="mb-3"><label class="form-label small fw-semibold">Produit</label>
+        <select id="mvProduct" class="form-select">${AppState.products.map(p=>`<option value="${p.id}">${p.nom}</option>`).join('')}</select></div>
+      <div class="mb-3"><label class="form-label small fw-semibold">Quantité</label>
+        <input type="number" min="1" id="mvQty" class="form-control" required></div>
+      <div class="mb-3"><label class="form-label small fw-semibold">Motif</label>
+        <input type="text" id="mvMotif" class="form-control" placeholder="ex : réception fournisseur, casse, inventaire..."></div>
+      <button type="submit" class="btn btn-brand w-100">Valider le mouvement</button>
+    </form>`;
+    const modal = openModal('Mouvement de stock', body);
+    document.getElementById('stockMoveForm').addEventListener('submit', async e=>{
+      e.preventDefault();
+      await Pages.saveStockMovement({
+        type: document.getElementById('mvType').value,
+        magasin_id: document.getElementById('mvStore').value,
+        produit_id: document.getElementById('mvProduct').value,
+        quantite: parseInt(document.getElementById('mvQty').value,10),
+        motif: document.getElementById('mvMotif').value
+      });
+      modal.hide();
+    });
+  },
+
+  async saveStockMovement({type, magasin_id, produit_id, quantite, motif}){
+    showSpinner();
+    try{
+      const ref = db.collection('stocks').doc(`${produit_id}_${magasin_id}`);
+      await db.runTransaction(async tx=>{
+        const doc = await tx.get(ref);
+        const current = doc.exists?(doc.data().quantite||0):0;
+        let newQty;
+        if(type==='entree') newQty = current+quantite;
+        else if(type==='sortie') newQty = current-quantite;
+        else newQty = quantite;
+        if(newQty<0) throw new Error('Quantité insuffisante en stock pour cette sortie.');
+        tx.set(ref, {produit_id, magasin_id, quantite:newQty}, {merge:true});
+      });
+      await db.collection('mouvements_stock').add({ produit_id, magasin_id, type, quantite, motif: motif||'',
+        date: firebase.firestore.FieldValue.serverTimestamp(), user: AppState.user.email });
+      Toast.show('Mouvement de stock enregistré','success');
+      Pages.stocks();
+    }catch(err){ console.error(err); Toast.show('Erreur : '+err.message,'danger'); }
+    finally{ hideSpinner(); }
+  },
+
+  // ---------------- POINTS DE VENTE ----------------
+  async pointsVente(){
+    showSpinner();
+    const content=document.getElementById('pageContent');
+    content.innerHTML = `<div class="d-flex justify-content-end mb-3">
+      <button class="btn btn-brand btn-sm" onclick="Pages.openStoreModal()"><i class="fa-solid fa-plus me-1"></i>Nouveau point de vente</button></div>
+      <div class="section-card"><div class="table-responsive"><table class="gc-table">
+        <thead><tr><th>Nom</th><th>Adresse</th><th>Téléphone</th><th></th></tr></thead>
+        <tbody id="storesBody"><tr><td colspan="4" class="text-center py-4 text-muted">Chargement...</td></tr></tbody>
+      </table></div></div>`;
+    try{
+      const snap = await db.collection('points_vente').orderBy('nom').get();
+      AppState.stores = snap.docs.map(d=>({id:d.id,...d.data()}));
+      document.getElementById('storesBody').innerHTML = AppState.stores.length ? AppState.stores.map(s=>`
+        <tr><td style="font-weight:600;">${s.nom}</td><td>${s.adresse||'-'}</td><td>${s.telephone||'-'}</td>
+        <td class="text-end"><button class="btn-icon" onclick="Pages.openStoreModal('${s.id}')"><i class="fa-solid fa-pen"></i></button>
+        <button class="btn-icon" onclick="Pages.deleteStore('${s.id}')"><i class="fa-solid fa-trash"></i></button></td></tr>`).join('')
+        : `<tr><td colspan="4" class="text-center py-4 text-muted">Aucun point de vente. Créez-en un pour commencer à vendre.</td></tr>`;
+    }catch(err){ Toast.show('Erreur : '+err.message,'danger'); }
+    finally{ hideSpinner(); }
+  },
+
+  async openStoreModal(id){
+    let s = {nom:'',adresse:'',telephone:''};
+    if(id){ const doc=await db.collection('points_vente').doc(id).get(); s=doc.data(); }
+    const body = `<form id="storeForm">
+      <div class="mb-3"><label class="form-label small fw-semibold">Nom du magasin</label><input id="sNom" class="form-control" value="${s.nom||''}" required></div>
+      <div class="mb-3"><label class="form-label small fw-semibold">Adresse</label><input id="sAdresse" class="form-control" value="${s.adresse||''}"></div>
+      <div class="mb-3"><label class="form-label small fw-semibold">Téléphone</label><input id="sTel" class="form-control" value="${s.telephone||''}"></div>
+      <button type="submit" class="btn btn-brand w-100">${id?'Enregistrer':'Créer'}</button></form>`;
+    const modal = openModal(id?'Modifier le point de vente':'Nouveau point de vente', body);
+    document.getElementById('storeForm').addEventListener('submit', async e=>{
+      e.preventDefault();
+      const data={nom:document.getElementById('sNom').value.trim(), adresse:document.getElementById('sAdresse').value.trim(), telephone:document.getElementById('sTel').value.trim()};
+      showSpinner();
+      try{
+        if(id) await db.collection('points_vente').doc(id).update(data); else await db.collection('points_vente').add(data);
+        Toast.show('Point de vente enregistré','success'); modal.hide(); await boot();
+      }catch(err){ Toast.show('Erreur : '+err.message,'danger'); } finally{ hideSpinner(); }
+    });
+  },
+
+  async deleteStore(id){
+    if(!confirm('Supprimer ce point de vente ?')) return;
+    showSpinner();
+    try{ await db.collection('points_vente').doc(id).delete(); Toast.show('Point de vente supprimé','success'); await boot(); }
+    catch(err){ Toast.show('Erreur : '+err.message,'danger'); } finally{ hideSpinner(); }
+  },
+
+  // ---------------- POINT DE VENTE (POS) ----------------
+  async pos(){
+    if(!AppState.currentStoreId){
+      document.getElementById('pageContent').innerHTML = `<div class="empty-state" style="padding:70px 10px;"><i class="fa-solid fa-store-slash"></i>
+        <div>Aucun point de vente configuré.<br>Créez d'abord un magasin dans "Points de vente".</div></div>`;
+      return;
+    }
+    showSpinner();
+    const content=document.getElementById('pageContent');
+    content.innerHTML = `
+      <div class="pos-grid">
+        <div>
+          <div class="d-flex gap-2 mb-3">
+            <input id="posSearch" class="form-control form-control-sm" placeholder="Rechercher un produit...">
+            <select id="posCategorie" class="form-select form-select-sm" style="max-width:200px;"><option value="">Toutes catégories</option></select>
+          </div>
+          <div id="posGrid" class="row g-2"></div>
+        </div>
+        <div>
+          <div class="section-card">
+            <h6><i class="fa-solid fa-cart-shopping me-1"></i> Panier</h6>
+            <div id="cartLines" style="max-height:280px;overflow-y:auto;"></div>
+            <div class="empty-state" id="cartEmpty" style="padding:24px 10px;"><i class="fa-solid fa-cart-shopping"></i><div>Panier vide</div></div>
+            <hr>
+            <div class="mb-2"><label class="small fw-semibold">Client (optionnel)</label>
+              <select id="posClient" class="form-select form-select-sm"><option value="">Client de passage</option></select></div>
+            <div class="mb-2"><label class="small fw-semibold">Mode de paiement</label>
+              <select id="posPayment" class="form-select form-select-sm">
+                <option value="especes">Espèces</option><option value="carte">Carte bancaire</option>
+                <option value="mobile_money">Mobile Money</option><option value="virement">Virement bancaire</option>
+                <option value="mixte">Paiement mixte</option></select></div>
+            <div class="d-flex justify-content-between align-items-center py-2" style="font-size:15px;">
+              <span class="fw-semibold">Total</span><span class="fw-bold" id="cartTotal" style="color:var(--accent2);font-size:20px;">0 GNF</span>
+            </div>
+            <button class="btn btn-brand w-100" id="checkoutBtn" onclick="Pages.confirmSale()" disabled><i class="fa-solid fa-check me-1"></i>Encaisser</button>
+          </div>
+        </div>
+      </div>`;
+    try{
+      const [prodSnap, catSnap, stockSnap, clientSnap] = await Promise.all([
+        db.collection('catalogue').orderBy('nom').get(),
+        db.collection('categories').orderBy('nom').get(),
+        db.collection('stocks').where('magasin_id','==',AppState.currentStoreId).get(),
+        db.collection('clients').orderBy('nom').get()
+      ]);
+      AppState.products = prodSnap.docs.map(d=>({id:d.id,...d.data()}));
+      AppState.categories = catSnap.docs.map(d=>({id:d.id,...d.data()}));
+      const stockMap={}; stockSnap.forEach(d=>{ const s=d.data(); stockMap[s.produit_id]=s.quantite||0; });
+      AppState.posStock = stockMap;
+      AppState.clients = clientSnap.docs.map(d=>({id:d.id,...d.data()}));
+      AppState.cart = [];
+
+      document.getElementById('posCategorie').innerHTML += AppState.categories.map(c=>`<option value="${c.id}">${c.nom}</option>`).join('');
+      document.getElementById('posClient').innerHTML += AppState.clients.map(c=>`<option value="${c.id}">${c.nom}</option>`).join('');
+
+      const renderGrid = ()=>{
+        const q=(document.getElementById('posSearch').value||'').toLowerCase();
+        const catId=document.getElementById('posCategorie').value;
+        const items = AppState.products.filter(p=> (!q||(p.nom||'').toLowerCase().includes(q)) && (!catId||p.categorie_id===catId) );
+        document.getElementById('posGrid').innerHTML = items.length ? items.map(p=>{
+          const stock = stockMap[p.id]||0;
+          return `<div class="col-6 col-md-4">
+            <div class="prod-tile" style="${stock<=0?'opacity:.45;cursor:not-allowed;':''}" ${stock>0?`onclick="Pages.addToCart('${p.id}')"`:''}>
+              <div class="nm">${p.nom}</div><div class="pr">${fmtGNF(p.prix)}</div><div class="stk">Stock : ${stock}</div>
+            </div></div>`;
+        }).join('') : `<div class="col-12"><div class="empty-state"><i class="fa-solid fa-magnifying-glass"></i><div>Aucun produit</div></div></div>`;
+      };
+      document.getElementById('posSearch').addEventListener('input', renderGrid);
+      document.getElementById('posCategorie').addEventListener('change', renderGrid);
+      renderGrid();
+      Pages.renderCart();
+    }catch(err){ console.error(err); Toast.show('Erreur POS : '+err.message,'danger'); }
+    finally{ hideSpinner(); }
+  },
+
+  addToCart(id){
+    const stock = AppState.posStock[id]||0;
+    const line = AppState.cart.find(l=>l.produit_id===id);
+    const currentQty = line?line.quantite:0;
+    if(currentQty+1>stock){ Toast.show('Stock insuffisant','danger'); return; }
+    const p = AppState.products.find(p=>p.id===id);
+    if(line) line.quantite++;
+    else AppState.cart.push({produit_id:id, produit_nom:p.nom, prix_unitaire:p.prix, quantite:1});
+    Pages.renderCart();
+  },
+
+  updateCartQty(id,delta){
+    const line=AppState.cart.find(l=>l.produit_id===id); if(!line) return;
+    const stock=AppState.posStock[id]||0;
+    const newQty=line.quantite+delta;
+    if(newQty<=0){ AppState.cart=AppState.cart.filter(l=>l.produit_id!==id); }
+    else if(newQty>stock){ Toast.show('Stock insuffisant','danger'); return; }
+    else line.quantite=newQty;
+    Pages.renderCart();
+  },
+
+  removeFromCart(id){ AppState.cart=AppState.cart.filter(l=>l.produit_id!==id); Pages.renderCart(); },
+
+  renderCart(){
+    const wrap=document.getElementById('cartLines'); const empty=document.getElementById('cartEmpty');
+    if(!wrap) return;
+    if(!AppState.cart.length){ wrap.innerHTML=''; empty.style.display='block'; }
+    else{
+      empty.style.display='none';
+      wrap.innerHTML = AppState.cart.map(l=>`
+        <div class="cart-line">
+          <div class="flex-grow-1"><div style="font-weight:600;">${l.produit_nom}</div><div class="small text-muted">${fmtGNF(l.prix_unitaire)} / unité</div></div>
+          <button class="btn-icon" style="width:26px;height:26px;" onclick="Pages.updateCartQty('${l.produit_id}',-1)">−</button>
+          <span style="width:22px;text-align:center;">${l.quantite}</span>
+          <button class="btn-icon" style="width:26px;height:26px;" onclick="Pages.updateCartQty('${l.produit_id}',1)">+</button>
+          <div style="width:90px;text-align:right;font-weight:600;">${fmtGNF(l.prix_unitaire*l.quantite)}</div>
+          <button class="btn-icon" style="width:26px;height:26px;color:var(--danger);" onclick="Pages.removeFromCart('${l.produit_id}')"><i class="fa-solid fa-xmark"></i></button>
+        </div>`).join('');
+    }
+    const total = AppState.cart.reduce((s,l)=>s+l.prix_unitaire*l.quantite,0);
+    document.getElementById('cartTotal').textContent = fmtGNF(total);
+    document.getElementById('checkoutBtn').disabled = AppState.cart.length===0;
+  },
+
+  async confirmSale(){
+    if(!AppState.cart.length) return;
+    const paymentMode = document.getElementById('posPayment').value;
+    const clientId = document.getElementById('posClient').value || null;
+    const total = AppState.cart.reduce((s,l)=>s+l.prix_unitaire*l.quantite,0);
+    const cartSnapshot = AppState.cart.map(l=>({...l}));
+    showSpinner();
+    try{
+      await db.runTransaction(async tx=>{
+        for(const line of cartSnapshot){
+          const ref = db.collection('stocks').doc(`${line.produit_id}_${AppState.currentStoreId}`);
+          const doc = await tx.get(ref);
+          const current = doc.exists?(doc.data().quantite||0):0;
+          if(current<line.quantite) throw new Error(`Stock insuffisant pour ${line.produit_nom}`);
+          tx.set(ref, {produit_id:line.produit_id, magasin_id:AppState.currentStoreId, quantite: current-line.quantite}, {merge:true});
+        }
+      });
+      const venteRef = await db.collection('ventes').add({
+        magasin_id: AppState.currentStoreId,
+        caissier_id: AppState.user.uid,
+        caissier_nom: (AppState.employee && AppState.employee.nom) || AppState.user.email,
+        client_id: clientId,
+        mode_paiement: paymentMode,
+        total,
+        statut:'validee',
+        date: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      const batch = db.batch();
+      cartSnapshot.forEach(line=>{
+        batch.set(db.collection('lignes_ventes').doc(), { vente_id: venteRef.id, produit_id: line.produit_id, produit_nom: line.produit_nom,
+          quantite: line.quantite, prix_unitaire: line.prix_unitaire, sous_total: line.prix_unitaire*line.quantite });
+        batch.set(db.collection('mouvements_stock').doc(), { produit_id: line.produit_id, magasin_id: AppState.currentStoreId, type:'sortie',
+          quantite: line.quantite, motif:`Vente #${venteRef.id.slice(0,6)}`, date: firebase.firestore.FieldValue.serverTimestamp(), user: AppState.user.email });
+      });
+      await batch.commit();
+      Pages.printReceipt({ lines: cartSnapshot, total, paymentMode });
+      Toast.show('Vente enregistrée avec succès','success');
+      Pages.pos();
+    }catch(err){ console.error(err); Toast.show('Erreur : '+err.message,'danger'); }
+    finally{ hideSpinner(); }
+  },
+
+  printReceipt(sale){
+    const store = AppState.stores.find(s=>s.id===AppState.currentStoreId);
+    const win = window.open('', '_blank', 'width=380,height=600');
+    if(!win) return; // popup bloqué par le navigateur
+    const lines = sale.lines.map(l=>`<tr><td>${l.produit_nom}</td><td style="text-align:center;">${l.quantite}</td><td style="text-align:right;">${fmtGNF(l.prix_unitaire*l.quantite)}</td></tr>`).join('');
+    win.document.write(`<html><head><title>Ticket de vente</title>
+      <style>body{font-family:monospace;font-size:12px;padding:10px;width:280px;} table{width:100%;border-collapse:collapse;} th,td{padding:2px 0;} hr{border:none;border-top:1px dashed #000;}</style>
+      </head><body>
+      <div style="text-align:center;"><b>Espace Électronique Djalonka</b><br>${store?store.nom:''}<br>${new Date().toLocaleString('fr-FR')}</div>
+      <hr><table>${lines}</table><hr>
+      <div style="text-align:right;font-weight:bold;">TOTAL : ${fmtGNF(sale.total)}</div>
+      <div>Paiement : ${sale.paymentMode}</div>
+      <div style="text-align:center;margin-top:10px;">Merci de votre confiance !</div>
+      <script>window.print();<\/script>
+      </body></html>`);
+    win.document.close();
+  },
+
+  // ---------------- HISTORIQUE DES VENTES ----------------
+  async ventesHistory(){
+    showSpinner();
+    const content=document.getElementById('pageContent');
+    content.innerHTML = `
+      <div class="d-flex flex-wrap gap-2 mb-3">
+        <input type="date" id="vFrom" class="form-control form-control-sm" style="width:160px;">
+        <input type="date" id="vTo" class="form-control form-control-sm" style="width:160px;">
+        <select id="vStore" class="form-select form-select-sm" style="width:200px;"><option value="">Tous les magasins</option></select>
+        <button class="btn btn-navy btn-sm" onclick="Pages.filterVentes()"><i class="fa-solid fa-filter me-1"></i>Filtrer</button>
+      </div>
+      <div class="section-card"><div class="table-responsive"><table class="gc-table">
+        <thead><tr><th>Date</th><th>Magasin</th><th>Caissier</th><th>Paiement</th><th class="text-end">Montant</th></tr></thead>
+        <tbody id="ventesBody"><tr><td colspan="5" class="text-center py-4 text-muted">Chargement...</td></tr></tbody>
+      </table></div><div class="d-flex justify-content-end mt-2 fw-semibold" id="ventesTotalRow"></div></div>`;
+    const storesSnap = await db.collection('points_vente').orderBy('nom').get();
+    AppState.stores = storesSnap.docs.map(d=>({id:d.id,...d.data()}));
+    document.getElementById('vStore').innerHTML += AppState.stores.map(s=>`<option value="${s.id}">${s.nom}</option>`).join('');
+    await Pages.filterVentes();
+  },
+
+  async filterVentes(){
+    showSpinner();
+    try{
+      const snap = await db.collection('ventes').orderBy('date','desc').limit(200).get();
+      let rows = snap.docs.map(d=>({id:d.id,...d.data()}));
+      const from = document.getElementById('vFrom')?.value;
+      const to = document.getElementById('vTo')?.value;
+      const storeId = document.getElementById('vStore')?.value;
+      if(from) rows = rows.filter(v=> tsToDate(v.date) >= new Date(from+'T00:00:00'));
+      if(to) rows = rows.filter(v=> tsToDate(v.date) <= new Date(to+'T23:59:59'));
+      if(storeId) rows = rows.filter(v=> v.magasin_id===storeId);
+      const total = rows.reduce((s,v)=>s+(v.total||0),0);
+      document.getElementById('ventesBody').innerHTML = rows.length ? rows.map(v=>{
+        const store = AppState.stores.find(s=>s.id===v.magasin_id);
+        return `<tr><td>${fmtDate(tsToDate(v.date))}</td><td>${store?store.nom:'-'}</td><td>${v.caissier_nom||'-'}</td>
+        <td><span class="badge-soft bg-soft-navy">${v.mode_paiement||'-'}</span></td><td class="text-end fw-semibold">${fmtGNF(v.total)}</td></tr>`;
+      }).join('') : `<tr><td colspan="5" class="text-center py-4 text-muted">Aucune vente trouvée</td></tr>`;
+      document.getElementById('ventesTotalRow').textContent = `Total affiché : ${fmtGNF(total)} (${rows.length} vente(s) — 200 dernières ventes analysées)`;
+    }catch(err){ console.error(err); Toast.show('Erreur : '+err.message,'danger'); }
+    finally{ hideSpinner(); }
+  },
+
+  // ---------------- CLIENTS ----------------
+  async clients(){
+    showSpinner();
+    const content=document.getElementById('pageContent');
+    content.innerHTML = `<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+      <input id="clientSearch" class="form-control form-control-sm" style="width:260px;" placeholder="Rechercher un client...">
+      <button class="btn btn-brand btn-sm" onclick="Pages.openClientModal()"><i class="fa-solid fa-plus me-1"></i>Nouveau client</button></div>
+      <div class="section-card"><div class="table-responsive"><table class="gc-table">
+        <thead><tr><th>Nom</th><th>Téléphone</th><th>Email</th><th class="text-end">Solde</th><th></th></tr></thead>
+        <tbody id="clientsBody"><tr><td colspan="5" class="text-center py-4 text-muted">Chargement...</td></tr></tbody>
+      </table></div></div>`;
+    try{
+      const snap = await db.collection('clients').orderBy('nom').get();
+      AppState.clients = snap.docs.map(d=>({id:d.id,...d.data()}));
+      const render = ()=>{
+        const q=(document.getElementById('clientSearch').value||'').toLowerCase();
+        const rows = AppState.clients.filter(c=>!q||(c.nom||'').toLowerCase().includes(q));
+        document.getElementById('clientsBody').innerHTML = rows.length? rows.map(c=>`
+          <tr><td style="font-weight:600;cursor:pointer;" onclick="Pages.viewClientHistory('${c.id}')">${c.nom}</td>
+          <td>${c.telephone||'-'}</td><td>${c.email||'-'}</td>
+          <td class="text-end">${fmtGNF(c.solde||0)}</td>
+          <td class="text-end"><button class="btn-icon" onclick="Pages.openClientModal('${c.id}')"><i class="fa-solid fa-pen"></i></button>
+          <button class="btn-icon" onclick="Pages.deleteClient('${c.id}')"><i class="fa-solid fa-trash"></i></button></td></tr>`).join('')
+          : `<tr><td colspan="5" class="text-center py-4 text-muted">Aucun client</td></tr>`;
+      };
+      document.getElementById('clientSearch').addEventListener('input', render);
+      render();
+    }catch(err){ console.error(err); Toast.show('Erreur : '+err.message,'danger'); }
+    finally{ hideSpinner(); }
+  },
+
+  async openClientModal(id){
+    let c = {nom:'',telephone:'',email:'',solde:0};
+    if(id){ const doc=await db.collection('clients').doc(id).get(); c=doc.data(); }
+    const body=`<form id="clientForm">
+      <div class="mb-3"><label class="form-label small fw-semibold">Nom complet</label><input id="cNom" class="form-control" value="${c.nom||''}" required></div>
+      <div class="row g-2 mb-3">
+        <div class="col-6"><label class="form-label small fw-semibold">Téléphone</label><input id="cTel" class="form-control" value="${c.telephone||''}"></div>
+        <div class="col-6"><label class="form-label small fw-semibold">Email</label><input id="cEmail" class="form-control" value="${c.email||''}"></div>
+      </div>
+      <div class="mb-3"><label class="form-label small fw-semibold">Solde (crédit)</label><input type="number" id="cSolde" class="form-control" value="${c.solde||0}"></div>
+      <button type="submit" class="btn btn-brand w-100">${id?'Enregistrer':'Créer le client'}</button></form>`;
+    const modal = openModal(id?'Modifier le client':'Nouveau client', body);
+    document.getElementById('clientForm').addEventListener('submit', async e=>{
+      e.preventDefault();
+      const data={nom:document.getElementById('cNom').value.trim(), telephone:document.getElementById('cTel').value.trim(),
+        email:document.getElementById('cEmail').value.trim(), solde:parseFloat(document.getElementById('cSolde').value)||0};
+      showSpinner();
+      try{
+        if(id) await db.collection('clients').doc(id).update(data); else await db.collection('clients').add(data);
+        Toast.show('Client enregistré','success'); modal.hide(); Pages.clients();
+      }catch(err){ Toast.show('Erreur : '+err.message,'danger'); } finally{ hideSpinner(); }
+    });
+  },
+
+  async deleteClient(id){
+    if(!confirm('Supprimer ce client ?')) return;
+    showSpinner();
+    try{ await db.collection('clients').doc(id).delete(); Toast.show('Client supprimé','success'); Pages.clients(); }
+    catch(err){ Toast.show('Erreur : '+err.message,'danger'); } finally{ hideSpinner(); }
+  },
+
+  async viewClientHistory(id){
+    const c = AppState.clients.find(c=>c.id===id);
+    showSpinner();
+    try{
+      const snap = await db.collection('ventes').where('client_id','==',id).orderBy('date','desc').limit(50).get();
+      const rows = snap.docs.map(d=>{ const v=d.data(); return `<tr><td>${fmtDate(tsToDate(v.date))}</td><td>${v.mode_paiement||'-'}</td><td class="text-end">${fmtGNF(v.total)}</td></tr>`; }).join('');
+      openModal(`Historique — ${c?c.nom:''}`, `<div class="table-responsive"><table class="gc-table"><thead><tr><th>Date</th><th>Paiement</th><th class="text-end">Montant</th></tr></thead><tbody>${rows||'<tr><td colspan="3" class="text-center text-muted py-3">Aucun achat</td></tr>'}</tbody></table></div>`);
+    }catch(err){ Toast.show('Erreur : '+err.message,'danger'); } finally{ hideSpinner(); }
+  }
+};
+
+// ==================================================================
+// DÉMARRAGE DE L'APPLICATION APRÈS CONNEXION
+// ==================================================================
+async function boot(){
+  const storesSnap = await db.collection('points_vente').orderBy('nom').get();
+  AppState.stores = storesSnap.docs.map(d=>({id:d.id,...d.data()}));
+  const sw = document.getElementById('storeSwitcher');
+  if(!AppState.stores.length){
+    sw.innerHTML = `<option value="">Aucun magasin</option>`;
+    AppState.currentStoreId = null;
+  }else{
+    sw.innerHTML = AppState.stores.map(s=>`<option value="${s.id}">${s.nom}</option>`).join('');
+    if(!AppState.currentStoreId || !AppState.stores.find(s=>s.id===AppState.currentStoreId)){
+      AppState.currentStoreId = AppState.stores[0].id;
+    }
+    sw.value = AppState.currentStoreId;
+  }
+  sw.onchange = ()=>{ AppState.currentStoreId = sw.value; Router.go(AppState.currentPage); };
+  buildNavMenu();
+  Router.go('dashboard');
+}
+
+auth.onAuthStateChanged(async function(user){
   const loginScreen = document.getElementById('loginScreen');
   const appShell = document.getElementById('appShell');
   if(user){
     loginScreen.style.display = 'none';
     appShell.style.display = 'flex';
-    document.getElementById('userLabel').textContent = user.email;
+    AppState.user = user;
+    showSpinner();
+    try{
+      const snap = await db.collection('employees').where('email','==',user.email).limit(1).get();
+      AppState.employee = snap.empty ? {nom:user.email} : snap.docs[0].data();
+      // Le champ "role" doit être ajouté manuellement sur chaque document "employees"
+      // dans Firestore (admin, directeur, responsable, caissier, agent).
+      // Par défaut (champ absent), l'utilisateur est traité comme administrateur.
+      AppState.role = AppState.employee.role || 'admin';
+      document.getElementById('userLabel').textContent = AppState.employee.nom || user.email;
+      await boot();
+    }catch(err){
+      console.error(err);
+      Toast.show('Erreur de chargement du profil : '+err.message,'danger');
+    }finally{ hideSpinner(); }
   }else{
     appShell.style.display = 'none';
     loginScreen.style.display = 'flex';
     document.getElementById('loginForm').reset();
+    AppState.user = null; AppState.employee = null;
   }
 });
 
+document.getElementById('menuToggle').addEventListener('click', ()=>{
+  document.getElementById('sidebar').classList.toggle('show');
+});
+
 // Stub minimal pour éviter une erreur JS tant que les raccourcis clavier ne sont pas développés
-const Shortcuts = { showHelp(){ /* à implémenter */ } };
+const Shortcuts = { showHelp(){ Toast.show('Raccourcis clavier : module à venir.', 'info'); } };
 </script>
 </body>
 </html>

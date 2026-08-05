@@ -293,6 +293,9 @@ const Auth = {
       let msg = "Impossible de créer le compte admin.";
       if(e && e.code === 'app/already-exists') msg = "Un compte admin existe déjà.";
       if(e && e.code === 'auth/email-already-in-use') msg = "Un compte admin existe déjà.";
+      // Debug temporaire : affiche le code d'erreur brut pour diagnostic
+      msg += " (code: " + (e && e.code ? e.code : 'inconnu') + ")";
+      console.error('bootstrapAdmin error:', e);
       errBox.className = 'alert alert-danger py-2 small';
       errBox.textContent = msg;
       errBox.style.display = 'block';

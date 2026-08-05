@@ -159,12 +159,16 @@ kbd{background:#eef2f8;color:var(--navy2);border:1px solid #d6dee9;border-radius
 .sidebar-footer a{color:#93a4bb;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:6px;}
 .sidebar-footer a:hover{color:#fff;}
 
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(15,36,82,.45);z-index:1025;}
+.sidebar-overlay.show{display:block;}
+
 @media (max-width: 991px){
   .sidebar{transform:translateX(-100%);}
   .sidebar.show{transform:translateX(0);}
   .main-wrap{margin-left:0;}
   #menuToggle{display:inline-flex;}
   .pos-grid{grid-template-columns:1fr;}
+  .topbar .store-pill{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 }
 @media (max-width: 767px){
   .content{padding:14px 12px;}
@@ -184,10 +188,39 @@ kbd{background:#eef2f8;color:var(--navy2);border:1px solid #d6dee9;border-radius
   .quick-tile .qlbl{font-size:11.5px;}
 }
 @media (max-width: 480px){
-  .topbar .store-pill{max-width:120px;}
+  .topbar .store-pill{max-width:110px;}
   .login-card{padding:24px 16px;}
   .login-logo{width:72px;height:72px;}
+  .quick-grid{grid-template-columns:repeat(2,1fr);gap:10px;}
+  .stat-card{padding:12px;}
+  .stat-card .val{font-size:17px;}
+  .topbar h5{font-size:14px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .section-card{padding:12px;border-radius:12px;}
+  table.gc-table{font-size:11.5px;}
+  table.gc-table thead th{padding:7px 6px;}
+  table.gc-table tbody td{padding:7px 6px;}
+  .cart-line{font-size:12px;}
+  .btn-icon{width:30px;height:30px;}
 }
+
+/* ---------- POS / PANIER SUR MOBILE ---------- */
+@media (max-width: 767px){
+  .pos-grid > div:first-child .prod-tile{padding:10px;}
+  .pos-grid .col-6.col-md-4{padding-left:6px;padding-right:6px;}
+  #posSearch, #posCategorie{font-size:13px;}
+  .pos-grid .d-flex.gap-2.mb-3{flex-wrap:wrap;}
+  .pos-grid .d-flex.gap-2.mb-3 #posCategorie{max-width:100% !important;width:100%;}
+}
+
+/* ---------- TABLETTE (paysage / iPad) ---------- */
+@media (min-width: 768px) and (max-width: 991px){
+  .quick-grid{grid-template-columns:repeat(4,1fr);}
+  .content{padding:18px 20px;}
+}
+
+/* ---------- EVITER LE DEBORDEMENT HORIZONTAL GLOBAL ---------- */
+html, body{max-width:100%;overflow-x:hidden;}
+.dropdown-menu{max-width:90vw;}
 .spinner-overlay{position:fixed;inset:0;background:rgba(255,255,255,.7);display:none;align-items:center;justify-content:center;z-index:3000;}
 .empty-state{text-align:center;padding:40px 10px;color:var(--muted);}
 .empty-state i{font-size:34px;margin-bottom:10px;color:#c7d2e0;}
@@ -247,6 +280,8 @@ kbd{background:#eef2f8;color:var(--navy2);border:1px solid #d6dee9;border-radius
       <a href="#" onclick="Shortcuts.showHelp();return false;"><i class="fa-solid fa-keyboard"></i> Raccourcis clavier (?)</a>
     </div>
   </aside>
+
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
   <div class="main-wrap">
     <div class="topbar">
@@ -401,6 +436,7 @@ const AppState = {
   cart: [],
   suppliers: [],
   achatLines: [],
+  employees: [],
   currentPage: 'dashboard'
 };
 
@@ -420,7 +456,7 @@ const NAV_ITEMS = [
   { id:'rapports',      label:'Rapports & statistiques',icon:'fa-chart-line',        section:'Analyse' },
   { id:'notifications', label:'Notifications',          icon:'fa-bell',              section:'Analyse' },
   { id:'points_vente',  label:'Points de vente',        icon:'fa-store',             section:'Administration', adminOnly:true },
-  { id:'utilisateurs',  label:'Utilisateurs & rôles',   icon:'fa-user-gear',         section:'Administration', adminOnly:true, soon:true },
+  { id:'utilisateurs',  label:'Utilisateurs & rôles',   icon:'fa-user-gear',         section:'Administration', adminOnly:true },
   { id:'parametres',    label:'Paramètres',             icon:'fa-gear',              section:'Administration', adminOnly:true, soon:true }
 ];
 
@@ -530,7 +566,8 @@ const Router = {
       achats: ()=>Pages.achats(),
       rapports: ()=>Pages.rapports(),
       notifications: ()=>Pages.notifications(),
-      points_vente: ()=>Pages.pointsVente()
+      points_vente: ()=>Pages.pointsVente(),
+      utilisateurs: ()=>Pages.utilisateurs()
     };
     (renderers[pageId] || (()=>Pages.comingSoon(pageId)))();
   }
@@ -687,6 +724,157 @@ const Pages = {
       Toast.show("Erreur lors du chargement des notifications : "+err.message,'danger');
       document.getElementById('notifList').innerHTML = `<div class="empty-state"><i class="fa-solid fa-triangle-exclamation"></i><div>Impossible de charger les notifications</div></div>`;
     }finally{ hideSpinner(); }
+  },
+
+  // ---------------- UTILISATEURS & RÔLES ----------------
+  // La création d'un compte utilise Firebase Auth (email technique + PIN), ce qui
+  // déconnecte automatiquement le compte admin en cours (limitation de l'API cliente
+  // Firebase Auth : createUserWithEmailAndPassword change la session active).
+  // On prévient l'admin avant de créer, puis on le renvoie à l'écran de connexion.
+  // Modifier un utilisateur existant (nom, rôle, statut actif) ne touche que
+  // Firestore et ne déconnecte donc personne.
+  ROLES: [
+    {id:'admin',        label:'Administrateur'},
+    {id:'directeur',    label:'Directeur'},
+    {id:'responsable',  label:'Responsable'},
+    {id:'caissier',     label:'Caissier'},
+    {id:'agent',        label:'Agent'}
+  ],
+
+  async utilisateurs(){
+    showSpinner();
+    const content = document.getElementById('pageContent');
+    content.innerHTML = `
+      <div class="d-flex justify-content-end mb-3">
+        <button class="btn btn-brand btn-sm" onclick="Pages.openUserModal()"><i class="fa-solid fa-user-plus me-1"></i>Nouvel utilisateur</button>
+      </div>
+      <div class="section-card"><div class="table-responsive"><table class="gc-table">
+        <thead><tr><th>Nom</th><th>Identifiant</th><th>Rôle</th><th>Statut</th><th></th></tr></thead>
+        <tbody id="usersBody"><tr><td colspan="5" class="text-center py-4 text-muted">Chargement...</td></tr></tbody>
+      </table></div></div>`;
+    try{
+      const snap = await db.collection('employees').orderBy('nom').get();
+      AppState.employees = snap.docs.map(d=>({id:d.id, ...d.data()}));
+      const roleLabel = r => (Pages.ROLES.find(x=>x.id===r)||{}).label || (r||'agent');
+      document.getElementById('usersBody').innerHTML = AppState.employees.length ? AppState.employees.map(u=>{
+        const actif = u.actif !== false; // absent -> considéré actif par défaut
+        const isSelf = AppState.user && u.id === AppState.user.uid;
+        return `<tr>
+          <td style="font-weight:600;">${esc(u.nom||'-')}${isSelf?' <span class="badge-soft bg-soft-navy">Vous</span>':''}</td>
+          <td class="small text-muted">${esc(u.username||'-')}</td>
+          <td><span class="badge-soft ${u.role==='admin'?'bg-soft-danger':'bg-soft-navy'}">${esc(roleLabel(u.role))}</span></td>
+          <td><span class="badge-soft ${actif?'bg-soft-success':'bg-soft-danger'}">${actif?'Actif':'Désactivé'}</span></td>
+          <td class="text-end">
+            <button class="btn-icon" onclick="Pages.openUserModal('${u.id}')" title="Modifier"><i class="fa-solid fa-pen"></i></button>
+            ${isSelf?'':`<button class="btn-icon" onclick="Pages.toggleUserActive('${u.id}', ${actif})" title="${actif?'Désactiver':'Réactiver'}"><i class="fa-solid ${actif?'fa-user-slash':'fa-user-check'}"></i></button>`}
+          </td>
+        </tr>`;
+      }).join('') : `<tr><td colspan="5" class="text-center py-4 text-muted">Aucun utilisateur</td></tr>`;
+    }catch(err){
+      console.error(err);
+      Toast.show('Erreur lors du chargement des utilisateurs : '+err.message,'danger');
+    }finally{ hideSpinner(); }
+  },
+
+  async openUserModal(id){
+    const isEdit = !!id;
+    let u = {nom:'', username:'', role:'agent', actif:true};
+    if(isEdit){
+      const doc = await db.collection('employees').doc(id).get();
+      if(doc.exists) u = {id:doc.id, ...doc.data()};
+    }
+    const roleOptions = Pages.ROLES.map(r=>`<option value="${r.id}" ${u.role===r.id?'selected':''}>${r.label}</option>`).join('');
+    const body = `<form id="userForm">
+      <div class="mb-3"><label class="form-label small fw-semibold">Nom complet</label>
+        <input id="uNom" class="form-control" value="${esc(u.nom||'')}" required></div>
+      <div class="mb-3"><label class="form-label small fw-semibold">Identifiant de connexion</label>
+        <input id="uUsername" class="form-control" value="${esc(u.username||'')}" ${isEdit?'disabled':''} required
+          placeholder="ex : mamadou" ${isEdit?'':'pattern="[a-z0-9_.]+" title="Lettres minuscules, chiffres, points et tirets bas uniquement"'}>
+        ${isEdit?'<div class="small text-muted mt-1">L\'identifiant ne peut pas être modifié.</div>':''}</div>
+      ${isEdit?'':`
+      <div class="mb-3"><label class="form-label small fw-semibold">PIN (mot de passe, min. 6 caractères)</label>
+        <input id="uPin" type="password" class="form-control" minlength="6" required placeholder="ex : 123456"></div>`}
+      <div class="mb-3"><label class="form-label small fw-semibold">Rôle</label>
+        <select id="uRole" class="form-select">${roleOptions}</select></div>
+      ${isEdit?`<div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" id="uActif" ${u.actif!==false?'checked':''}>
+        <label class="form-check-label small" for="uActif">Compte actif</label></div>`:''}
+      ${isEdit?'':'<div class="alert alert-warning small py-2">La création d\'un compte va vous déconnecter momentanément (limitation technique). Reconnectez-vous ensuite avec votre propre identifiant.</div>'}
+      <button type="submit" class="btn btn-brand w-100">${isEdit?'Enregistrer':'Créer le compte'}</button>
+    </form>`;
+    const modal = openModal(isEdit?'Modifier l\'utilisateur':'Nouvel utilisateur', body);
+    document.getElementById('userForm').addEventListener('submit', async e=>{
+      e.preventDefault();
+      if(isEdit){
+        await Pages.saveUserEdit(id, {
+          nom: document.getElementById('uNom').value.trim(),
+          role: document.getElementById('uRole').value,
+          actif: document.getElementById('uActif').checked
+        });
+      }else{
+        await Pages.createUser({
+          nom: document.getElementById('uNom').value.trim(),
+          username: document.getElementById('uUsername').value.trim().toLowerCase(),
+          pin: document.getElementById('uPin').value,
+          role: document.getElementById('uRole').value
+        });
+      }
+      modal.hide();
+    });
+  },
+
+  async saveUserEdit(id, {nom, role, actif}){
+    showSpinner();
+    try{
+      await db.collection('employees').doc(id).update({nom, role, actif});
+      Toast.show('Utilisateur mis à jour','success');
+      if(AppState.user && id===AppState.user.uid){
+        AppState.employee = {...AppState.employee, nom, role, actif};
+        AppState.role = role;
+        document.getElementById('userLabel').textContent = nom;
+        buildNavMenu(); Router.go(AppState.currentPage);
+      }
+      Pages.utilisateurs();
+    }catch(err){ console.error(err); Toast.show('Erreur : '+err.message,'danger'); }
+    finally{ hideSpinner(); }
+  },
+
+  async toggleUserActive(id, currentlyActive){
+    const action = currentlyActive ? 'désactiver' : 'réactiver';
+    if(!confirm(`Confirmer : ${action} ce compte utilisateur ?`)) return;
+    showSpinner();
+    try{
+      await db.collection('employees').doc(id).update({actif: !currentlyActive});
+      Toast.show(`Compte ${currentlyActive?'désactivé':'réactivé'}`,'success');
+      Pages.utilisateurs();
+    }catch(err){ console.error(err); Toast.show('Erreur : '+err.message,'danger'); }
+    finally{ hideSpinner(); }
+  },
+
+  async createUser({nom, username, pin, role}){
+    if(!nom || !username || !pin){ Toast.show('Tous les champs sont requis','danger'); return; }
+    if(pin.length<6){ Toast.show('Le PIN doit contenir au moins 6 caractères','danger'); return; }
+    if(!/^[a-z0-9_.]+$/.test(username)){ Toast.show("Identifiant invalide (lettres minuscules, chiffres, points, tirets bas uniquement)",'danger'); return; }
+    showSpinner();
+    try{
+      const existing = await db.collection('employees').where('username','==',username).limit(1).get();
+      if(!existing.empty){ Toast.show('Cet identifiant existe déjà','danger'); hideSpinner(); return; }
+      const email = `${username}@djalonka.local`;
+      // createUserWithEmailAndPassword change la session Firebase Auth active :
+      // l'admin actuellement connecté sera déconnecté juste après cet appel.
+      const cred = await auth.createUserWithEmailAndPassword(email, pin);
+      await db.collection('employees').doc(cred.user.uid).set({
+        username, email, nom, role, actif:true
+      });
+      await auth.signOut();
+      Toast.show(`Compte "${username}" créé. Reconnectez-vous.`,'success');
+    }catch(err){
+      console.error(err);
+      let msg = err.message;
+      if(err.code==='auth/email-already-in-use') msg = 'Cet identifiant est déjà utilisé.';
+      Toast.show('Erreur : '+msg,'danger');
+      hideSpinner();
+    }
   },
 
   // ---------------- TABLEAU DE BORD ----------------
@@ -1835,6 +2023,13 @@ auth.onAuthStateChanged(async function(user){
     try{
       const snap = await db.collection('employees').where('email','==',user.email).limit(1).get();
       AppState.employee = snap.empty ? {nom:user.email} : snap.docs[0].data();
+      // Un compte désactivé depuis la page Utilisateurs ne doit pas pouvoir
+      // accéder à l'application même si les identifiants Firebase Auth sont valides.
+      if(AppState.employee.actif === false){
+        Toast.show('Ce compte a été désactivé. Contactez un administrateur.','danger');
+        await auth.signOut();
+        return;
+      }
       // Le champ "role" doit être ajouté manuellement sur chaque document "employees"
       // dans Firestore (admin, directeur, responsable, caissier, agent).
       // Par sécurité, si le champ est absent, l'utilisateur reçoit le rôle le
@@ -1857,6 +2052,18 @@ auth.onAuthStateChanged(async function(user){
 
 document.getElementById('menuToggle').addEventListener('click', ()=>{
   document.getElementById('sidebar').classList.toggle('show');
+  document.getElementById('sidebarOverlay').classList.toggle('show');
+});
+document.getElementById('sidebarOverlay').addEventListener('click', ()=>{
+  document.getElementById('sidebar').classList.remove('show');
+  document.getElementById('sidebarOverlay').classList.remove('show');
+});
+// Ferme automatiquement la sidebar mobile après un clic sur un lien de navigation
+document.getElementById('sidebar').addEventListener('click', (e)=>{
+  if(e.target.closest('.nav-link') && window.innerWidth <= 991){
+    document.getElementById('sidebar').classList.remove('show');
+    document.getElementById('sidebarOverlay').classList.remove('show');
+  }
 });
 
 // Stub minimal pour éviter une erreur JS tant que les raccourcis clavier ne sont pas développés

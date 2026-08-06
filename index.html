@@ -391,7 +391,9 @@ const Auth = {
       await db.collection('employees').doc(auth.currentUser.uid).set({
         username: 'admin',
         email: defaultEmail,
-        nom: 'Administrateur'
+        nom: 'Administrateur',
+        role: 'admin',
+        actif: true
       });
       errBox.className = 'alert alert-success py-2 small';
       errBox.textContent = "Compte créé. Identifiant : admin — PIN : 123456. Connectez-vous, puis pensez à changer ce PIN.";
@@ -2056,6 +2058,7 @@ auth.onAuthStateChanged(async function(user){
     try{
       const snap = await db.collection('employees').where('email','==',user.email).limit(1).get();
       AppState.employee = snap.empty ? {nom:user.email} : snap.docs[0].data();
+      AppState.employeeDocId = snap.empty ? null : snap.docs[0].id;
       // Un compte désactivé depuis la page Utilisateurs ne doit pas pouvoir
       // accéder à l'application même si les identifiants Firebase Auth sont valides.
       if(AppState.employee.actif === false){
@@ -2063,11 +2066,29 @@ auth.onAuthStateChanged(async function(user){
         await auth.signOut();
         return;
       }
-      // Le champ "role" doit être ajouté manuellement sur chaque document "employees"
-      // dans Firestore (admin, directeur, responsable, caissier, agent).
-      // Par sécurité, si le champ est absent, l'utilisateur reçoit le rôle le
-      // moins privilégié ("agent") plutôt que "admin" — un compte mal configuré
-      // ne doit jamais hériter silencieusement des droits d'administration.
+      // Le champ "role" doit normalement être présent sur chaque document "employees"
+      // (admin, directeur, responsable, caissier, agent). Par sécurité, si le champ
+      // est absent, l'utilisateur reçoit d'abord le rôle le moins privilégié ("agent")
+      // — un compte mal configuré ne doit jamais hériter silencieusement des droits
+      // d'administration.
+      // EXCEPTION AUTO-RÉPARATION : si c'est le tout premier compte de l'application
+      // (aucun autre document "employees" n'existe) ou si son identifiant est
+      // "admin" et qu'aucun rôle n'est défini, on lui attribue automatiquement le
+      // rôle admin et on corrige son document Firestore, pour éviter de rester
+      // bloqué hors de la page d'administration après un bootstrap initial.
+      if(!AppState.employee.role){
+        let shouldBeAdmin = AppState.employee.username === 'admin';
+        if(!shouldBeAdmin){
+          const anyEmployee = await db.collection('employees').limit(2).get();
+          shouldBeAdmin = anyEmployee.size <= 1;
+        }
+        if(shouldBeAdmin){
+          AppState.employee.role = 'admin';
+          if(AppState.employeeDocId){
+            db.collection('employees').doc(AppState.employeeDocId).update({role:'admin'}).catch(e=>console.error('Auto-réparation du rôle admin échouée :', e));
+          }
+        }
+      }
       AppState.role = AppState.employee.role || 'agent';
       document.getElementById('userLabel').textContent = AppState.employee.nom || user.email; // texte via textContent -> déjà sûr
       await boot();

@@ -53,10 +53,13 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);margi
 /* ---------- APP LAYOUT ---------- */
 #appShell{display:none;min-height:100vh;}
 .sidebar{
-  width:250px;background:var(--navy);color:#cfd9e6;position:fixed;top:0;bottom:0;left:0;
-  overflow-y:auto;z-index:1030;transition:transform .25s ease;
+  width:250px;background:var(--navy);color:#cfd9e6;position:fixed;top:0;left:0;
+  height:100vh;height:100dvh;
+  display:flex;flex-direction:column;
+  z-index:1030;transition:transform .25s ease;
 }
-.sidebar-brand{padding:20px 18px;display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(255,255,255,.08);}
+#navMenu{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;min-height:0;}
+.sidebar-brand{padding:20px 18px;display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(255,255,255,.08);flex:0 0 auto;}
 .sidebar-brand .logo{width:38px;height:38px;border-radius:9px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:3px;}
 .sidebar-brand .logo img{width:100%;height:100%;object-fit:contain;}
 .sidebar-brand div b{color:#fff;font-size:15px;display:block;}
@@ -78,7 +81,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);margi
 }
 .topbar h5{margin:0;font-weight:700;color:var(--navy);}
 .topbar .store-pill{background:#eef2f8;border-radius:20px;padding:5px 14px;font-size:12.5px;color:var(--navy2);font-weight:600;}
-#menuToggle{display:none;}
+#menuToggle{display:none;position:relative;z-index:1035;}
 .content{padding:22px 24px;flex:1;}
 
 .stat-card{background:var(--card);border-radius:14px;padding:18px 20px;border:1px solid var(--border);height:100%;}
@@ -155,15 +158,15 @@ table.gc-table tbody tr:hover{background:#f9fbfd;}
 .demo-hint b{color:var(--navy2);}
 kbd{background:#eef2f8;color:var(--navy2);border:1px solid #d6dee9;border-radius:5px;padding:1.5px 6px;font-size:11.5px;font-family:inherit;font-weight:600;}
 .shortcut-hint{font-size:11px;color:var(--muted);margin-top:4px;}
-.sidebar-footer{position:sticky;bottom:0;padding:12px 18px;border-top:1px solid rgba(255,255,255,.08);background:var(--navy);}
+.sidebar-footer{flex:0 0 auto;padding:12px 18px;border-top:1px solid rgba(255,255,255,.08);background:var(--navy);}
 .sidebar-footer a{color:#93a4bb;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:6px;}
 .sidebar-footer a:hover{color:#fff;}
 
-.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(15,36,82,.45);z-index:1025;}
+.sidebar-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(15,36,82,.45);z-index:1021;}
 .sidebar-overlay.show{display:block;}
 
 @media (max-width: 991px){
-  .sidebar{transform:translateX(-100%);}
+  .sidebar{transform:translateX(-100%);width:min(250px, 82vw);}
   .sidebar.show{transform:translateX(0);}
   .main-wrap{margin-left:0;}
   #menuToggle{display:inline-flex;}
@@ -437,8 +440,63 @@ const AppState = {
   suppliers: [],
   achatLines: [],
   employees: [],
-  currentPage: 'dashboard'
+  currentPage: 'dashboard',
+  _cacheAt: {} // horodatage du dernier chargement par collection, pour éviter les rechargements inutiles
 };
+
+// ==================================================================
+// CACHE DE DONNÉES DE RÉFÉRENCE
+// Les collections "de référence" (points de vente, catalogue,
+// catégories, fournisseurs) changent rarement pendant une session.
+// Au lieu de les recharger à chaque changement de page, on les
+// garde en mémoire dans AppState et on ne relit Firestore que si
+// elles sont absentes, périmées (> CACHE_TTL_MS) ou si un
+// rafraîchissement est explicitement demandé (force=true).
+// Cela réduit fortement le nombre de requêtes réseau à chaque clic
+// de menu, donc la lenteur perçue.
+// ==================================================================
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+function _isFresh(key){
+  const t = AppState._cacheAt[key];
+  return t && (Date.now() - t) < CACHE_TTL_MS;
+}
+function _markFresh(key){
+  AppState._cacheAt[key] = Date.now();
+}
+
+async function ensureStores(force){
+  if(!force && AppState.stores.length && _isFresh('stores')) return AppState.stores;
+  const s = await db.collection('points_vente').orderBy('nom').get();
+  AppState.stores = s.docs.map(d=>({id:d.id, ...d.data()}));
+  _markFresh('stores');
+  return AppState.stores;
+}
+async function ensureProducts(force){
+  if(!force && AppState.products.length && _isFresh('products')) return AppState.products;
+  const p = await db.collection('catalogue').get();
+  AppState.products = p.docs.map(d=>({id:d.id, ...d.data()}));
+  _markFresh('products');
+  return AppState.products;
+}
+async function ensureCategories(force){
+  if(!force && AppState.categories.length && _isFresh('categories')) return AppState.categories;
+  const c = await db.collection('categories').orderBy('nom').get();
+  AppState.categories = c.docs.map(d=>({id:d.id, ...d.data()}));
+  _markFresh('categories');
+  return AppState.categories;
+}
+async function ensureSuppliers(force){
+  if(!force && AppState.suppliers.length && _isFresh('suppliers')) return AppState.suppliers;
+  const s = await db.collection('fournisseurs').orderBy('nom').get();
+  AppState.suppliers = s.docs.map(d=>({id:d.id, ...d.data()}));
+  _markFresh('suppliers');
+  return AppState.suppliers;
+}
+// Invalide le cache d'une collection de référence après une modif (ajout/edit/suppr)
+function invalidateCache(...keys){
+  keys.forEach(k=>{ delete AppState._cacheAt[k]; });
+}
 
 // Menu de navigation. "adminOnly" masque l'item pour les rôles non-admin.
 // "soon" affiche un badge "Bientôt" et ouvre un écran de type "à venir"
@@ -610,19 +668,13 @@ const Pages = {
     const SOLDE_ALERT_THRESHOLD = 500000; // seuil (GNF) au-delà duquel le solde client est signalé
 
     try{
-      const [storesSnap, productsSnap, stocksSnap, achatsSnap, clientsSnap, transfertsSnap, suppliersSnap] = await Promise.all([
-        db.collection('points_vente').get(),
-        db.collection('catalogue').get(),
+      const [stocksSnap, achatsSnap, clientsSnap, transfertsSnap] = await Promise.all([
         db.collection('stocks').get(),
         db.collection('achats').where('statut','==','en_attente').orderBy('date','desc').limit(50).get(),
         db.collection('clients').orderBy('solde','desc').limit(50).get(),
-        db.collection('transferts').orderBy('date','desc').limit(15).get(),
-        db.collection('fournisseurs').get()
+        db.collection('transferts').orderBy('date','desc').limit(15).get()
       ]);
-
-      AppState.stores = storesSnap.docs.map(d=>({id:d.id, ...d.data()}));
-      AppState.products = productsSnap.docs.map(d=>({id:d.id, ...d.data()}));
-      AppState.suppliers = suppliersSnap.docs.map(d=>({id:d.id, ...d.data()}));
+      await Promise.all([ensureStores(), ensureProducts(), ensureSuppliers()]);
 
       // --- Stock faible ---
       const lowStock = stocksSnap.docs.map(d=>({id:d.id,...d.data()})).filter(s=>{
@@ -894,13 +946,11 @@ const Pages = {
       </table></div></div>`;
     document.getElementById('quickGrid').innerHTML = buildQuickGrid();
     try{
-      const [storesSnap, productsSnap, stocksSnap] = await Promise.all([
-        db.collection('points_vente').get(),
-        db.collection('catalogue').get(),
+      const [, , stocksSnap] = await Promise.all([
+        ensureStores(),
+        ensureProducts(),
         db.collection('stocks').get()
       ]);
-      AppState.stores = storesSnap.docs.map(d=>({id:d.id, ...d.data()}));
-      AppState.products = productsSnap.docs.map(d=>({id:d.id, ...d.data()}));
 
       const lowStock = stocksSnap.docs.map(d=>({id:d.id,...d.data()})).filter(s=>{
         const p = AppState.products.find(p=>p.id===s.produit_id);
@@ -975,13 +1025,11 @@ const Pages = {
         </table></div>
       </div>`;
     try{
-      const [catsSnap, prodSnap, stocksSnap] = await Promise.all([
-        db.collection('categories').orderBy('nom').get(),
-        db.collection('catalogue').orderBy('nom').get(),
+      const [, , stocksSnap] = await Promise.all([
+        ensureCategories(),
+        ensureProducts(),
         db.collection('stocks').get()
       ]);
-      AppState.categories = catsSnap.docs.map(d=>({id:d.id,...d.data()}));
-      AppState.products = prodSnap.docs.map(d=>({id:d.id,...d.data()}));
       const stockByProduct = {};
       stocksSnap.forEach(d=>{ const s=d.data(); stockByProduct[s.produit_id]=(stockByProduct[s.produit_id]||0)+(s.quantite||0); });
 
@@ -1024,7 +1072,7 @@ const Pages = {
   },
 
   async openProductModal(id){
-    if(!AppState.categories.length){ const c=await db.collection('categories').get(); AppState.categories=c.docs.map(d=>({id:d.id,...d.data()})); }
+    await ensureCategories();
     let p = { nom:'', reference:'', categorie_id:'', prix:'', cout:'', stock_min:'', description:'', photo_url:'' };
     if(id){ const doc=await db.collection('catalogue').doc(id).get(); p={id, ...doc.data()}; }
     const body = `<form id="productForm">
@@ -1065,6 +1113,7 @@ const Pages = {
     try{
       if(id) await db.collection('catalogue').doc(id).update(data);
       else await db.collection('catalogue').add(data);
+      invalidateCache('products');
       Toast.show('Produit enregistré','success');
       Pages.catalogue();
     }catch(err){ console.error(err); Toast.show('Erreur : '+err.message,'danger'); }
@@ -1074,7 +1123,7 @@ const Pages = {
   async deleteProduct(id){
     if(!confirm('Supprimer ce produit ? Cette action est irréversible.')) return;
     showSpinner();
-    try{ await db.collection('catalogue').doc(id).delete(); Toast.show('Produit supprimé','success'); Pages.catalogue(); }
+    try{ await db.collection('catalogue').doc(id).delete(); invalidateCache('products'); Toast.show('Produit supprimé','success'); Pages.catalogue(); }
     catch(err){ Toast.show('Erreur : '+err.message,'danger'); }
     finally{ hideSpinner(); }
   },
@@ -1093,11 +1142,9 @@ const Pages = {
         <tbody id="stocksBody"><tr><td colspan="5" class="text-center py-4 text-muted">Chargement...</td></tr></tbody>
       </table></div></div>`;
     try{
-      const [stocksSnap, prodSnap, storesSnap] = await Promise.all([
-        db.collection('stocks').get(), db.collection('catalogue').get(), db.collection('points_vente').orderBy('nom').get()
+      const [stocksSnap] = await Promise.all([
+        db.collection('stocks').get(), ensureProducts(), ensureStores()
       ]);
-      AppState.products = prodSnap.docs.map(d=>({id:d.id,...d.data()}));
-      AppState.stores = storesSnap.docs.map(d=>({id:d.id,...d.data()}));
       const allStocks = stocksSnap.docs.map(d=>({id:d.id,...d.data()}));
       const sel=document.getElementById('stockStoreFilter');
       sel.innerHTML = '<option value="">Tous les magasins</option>'+AppState.stores.map(s=>`<option value="${s.id}">${esc(s.nom)}</option>`).join('');
@@ -1121,8 +1168,7 @@ const Pages = {
   },
 
   async openStockMovementModal(){
-    if(!AppState.stores.length){ const s = await db.collection('points_vente').get(); AppState.stores=s.docs.map(d=>({id:d.id,...d.data()})); }
-    if(!AppState.products.length){ const p = await db.collection('catalogue').get(); AppState.products=p.docs.map(d=>({id:d.id,...d.data()})); }
+    await Promise.all([ensureStores(), ensureProducts()]);
     if(!AppState.stores.length || !AppState.products.length){
       Toast.show("Créez d'abord un magasin et au moins un produit.", 'danger'); return;
     }
@@ -1193,13 +1239,11 @@ const Pages = {
         <tbody id="transfersBody"><tr><td colspan="7" class="text-center py-4 text-muted">Chargement...</td></tr></tbody>
       </table></div></div>`;
     try{
-      const [trSnap, prodSnap, storesSnap] = await Promise.all([
+      const [trSnap] = await Promise.all([
         db.collection('transferts').orderBy('date','desc').limit(100).get(),
-        db.collection('catalogue').get(),
-        db.collection('points_vente').orderBy('nom').get()
+        ensureProducts(),
+        ensureStores()
       ]);
-      AppState.products = prodSnap.docs.map(d=>({id:d.id,...d.data()}));
-      AppState.stores = storesSnap.docs.map(d=>({id:d.id,...d.data()}));
       const allTransfers = trSnap.docs.map(d=>({id:d.id,...d.data()}));
       const sel=document.getElementById('trStoreFilter');
       sel.innerHTML = '<option value="">Tous les magasins</option>'+AppState.stores.map(s=>`<option value="${s.id}">${esc(s.nom)}</option>`).join('');
@@ -1222,8 +1266,7 @@ const Pages = {
   },
 
   async openTransferModal(){
-    if(!AppState.stores.length){ const s = await db.collection('points_vente').get(); AppState.stores=s.docs.map(d=>({id:d.id,...d.data()})); }
-    if(!AppState.products.length){ const p = await db.collection('catalogue').get(); AppState.products=p.docs.map(d=>({id:d.id,...d.data()})); }
+    await Promise.all([ensureStores(), ensureProducts()]);
     if(AppState.stores.length<2){
       Toast.show('Il faut au moins deux points de vente pour effectuer un transfert.', 'danger'); return;
     }
@@ -1301,8 +1344,7 @@ const Pages = {
         <tbody id="suppliersBody"><tr><td colspan="5" class="text-center py-4 text-muted">Chargement...</td></tr></tbody>
       </table></div></div>`;
     try{
-      const snap = await db.collection('fournisseurs').orderBy('nom').get();
-      AppState.suppliers = snap.docs.map(d=>({id:d.id,...d.data()}));
+      await ensureSuppliers();
       const render = ()=>{
         const q=(document.getElementById('supplierSearch').value||'').toLowerCase();
         const rows = AppState.suppliers.filter(s=>!q||(s.nom||'').toLowerCase().includes(q));
@@ -1340,6 +1382,7 @@ const Pages = {
       showSpinner();
       try{
         if(id) await db.collection('fournisseurs').doc(id).update(data); else await db.collection('fournisseurs').add(data);
+        invalidateCache('suppliers');
         Toast.show('Fournisseur enregistré','success'); modal.hide(); Pages.fournisseurs();
       }catch(err){ Toast.show('Erreur : '+err.message,'danger'); } finally{ hideSpinner(); }
     });
@@ -1348,7 +1391,7 @@ const Pages = {
   async deleteSupplier(id){
     if(!confirm('Supprimer ce fournisseur ?')) return;
     showSpinner();
-    try{ await db.collection('fournisseurs').doc(id).delete(); Toast.show('Fournisseur supprimé','success'); Pages.fournisseurs(); }
+    try{ await db.collection('fournisseurs').doc(id).delete(); invalidateCache('suppliers'); Toast.show('Fournisseur supprimé','success'); Pages.fournisseurs(); }
     catch(err){ Toast.show('Erreur : '+err.message,'danger'); } finally{ hideSpinner(); }
   },
 
@@ -1368,13 +1411,11 @@ const Pages = {
         <tbody id="achatsBody"><tr><td colspan="6" class="text-center py-4 text-muted">Chargement...</td></tr></tbody>
       </table></div></div>`;
     try{
-      const [achSnap, supSnap, storesSnap] = await Promise.all([
+      const [achSnap] = await Promise.all([
         db.collection('achats').orderBy('date','desc').limit(100).get(),
-        db.collection('fournisseurs').orderBy('nom').get(),
-        db.collection('points_vente').orderBy('nom').get()
+        ensureSuppliers(),
+        ensureStores()
       ]);
-      AppState.suppliers = supSnap.docs.map(d=>({id:d.id,...d.data()}));
-      AppState.stores = storesSnap.docs.map(d=>({id:d.id,...d.data()}));
       const allAchats = achSnap.docs.map(d=>({id:d.id,...d.data()}));
       const render = ()=>{
         const st = document.getElementById('achatStatusFilter').value;
@@ -1396,9 +1437,7 @@ const Pages = {
   },
 
   async openPurchaseModal(){
-    if(!AppState.suppliers.length){ const s=await db.collection('fournisseurs').get(); AppState.suppliers=s.docs.map(d=>({id:d.id,...d.data()})); }
-    if(!AppState.stores.length){ const s=await db.collection('points_vente').get(); AppState.stores=s.docs.map(d=>({id:d.id,...d.data()})); }
-    if(!AppState.products.length){ const p=await db.collection('catalogue').get(); AppState.products=p.docs.map(d=>({id:d.id,...d.data()})); }
+    await Promise.all([ensureSuppliers(), ensureStores(), ensureProducts()]);
     if(!AppState.suppliers.length){ Toast.show("Créez d'abord un fournisseur.", 'danger'); return; }
     if(!AppState.stores.length || !AppState.products.length){ Toast.show("Créez d'abord un magasin et au moins un produit.", 'danger'); return; }
     AppState.achatLines = [];
@@ -1520,8 +1559,7 @@ const Pages = {
         <tbody id="storesBody"><tr><td colspan="4" class="text-center py-4 text-muted">Chargement...</td></tr></tbody>
       </table></div></div>`;
     try{
-      const snap = await db.collection('points_vente').orderBy('nom').get();
-      AppState.stores = snap.docs.map(d=>({id:d.id,...d.data()}));
+      await ensureStores(true);
       document.getElementById('storesBody').innerHTML = AppState.stores.length ? AppState.stores.map(s=>`
         <tr><td style="font-weight:600;">${esc(s.nom)}</td><td>${esc(s.adresse||'-')}</td><td>${esc(s.telephone||'-')}</td>
         <td class="text-end"><button class="btn-icon" onclick="Pages.openStoreModal('${s.id}')"><i class="fa-solid fa-pen"></i></button>
@@ -1597,14 +1635,12 @@ const Pages = {
         </div>
       </div>`;
     try{
-      const [prodSnap, catSnap, stockSnap, clientSnap] = await Promise.all([
-        db.collection('catalogue').orderBy('nom').get(),
-        db.collection('categories').orderBy('nom').get(),
+      const [, , stockSnap, clientSnap] = await Promise.all([
+        ensureProducts(),
+        ensureCategories(),
         db.collection('stocks').where('magasin_id','==',AppState.currentStoreId).get(),
         db.collection('clients').orderBy('nom').get()
       ]);
-      AppState.products = prodSnap.docs.map(d=>({id:d.id,...d.data()}));
-      AppState.categories = catSnap.docs.map(d=>({id:d.id,...d.data()}));
       const stockMap={}; stockSnap.forEach(d=>{ const s=d.data(); stockMap[s.produit_id]=s.quantite||0; });
       AppState.posStock = stockMap;
       AppState.clients = clientSnap.docs.map(d=>({id:d.id,...d.data()}));
@@ -1752,8 +1788,7 @@ const Pages = {
         <thead><tr><th>Date</th><th>Magasin</th><th>Caissier</th><th>Paiement</th><th class="text-end">Montant</th></tr></thead>
         <tbody id="ventesBody"><tr><td colspan="5" class="text-center py-4 text-muted">Chargement...</td></tr></tbody>
       </table></div><div class="d-flex justify-content-end mt-2 fw-semibold" id="ventesTotalRow"></div></div>`;
-    const storesSnap = await db.collection('points_vente').orderBy('nom').get();
-    AppState.stores = storesSnap.docs.map(d=>({id:d.id,...d.data()}));
+    await ensureStores();
     document.getElementById('vStore').innerHTML += AppState.stores.map(s=>`<option value="${s.id}">${esc(s.nom)}</option>`).join('');
     await Pages.filterVentes();
   },
@@ -1804,8 +1839,7 @@ const Pages = {
         <thead><tr><th>Produit</th><th class="text-end">Qté vendue</th><th class="text-end">Chiffre d'affaires</th></tr></thead>
         <tbody id="rpTopProductsBody"><tr><td colspan="3" class="text-center py-4 text-muted">Chargement...</td></tr></tbody>
       </table></div></div>`;
-    const storesSnap = await db.collection('points_vente').orderBy('nom').get();
-    AppState.stores = storesSnap.docs.map(d=>({id:d.id,...d.data()}));
+    await ensureStores();
     document.getElementById('rpStore').innerHTML += AppState.stores.map(s=>`<option value="${s.id}">${esc(s.nom)}</option>`).join('');
     await Pages.generateReport();
   },
@@ -1813,7 +1847,7 @@ const Pages = {
   async generateReport(){
     showSpinner();
     try{
-      if(!AppState.products.length){ const p=await db.collection('catalogue').get(); AppState.products=p.docs.map(d=>({id:d.id,...d.data()})); }
+      await ensureProducts();
       const from = document.getElementById('rpFrom').value;
       const to = document.getElementById('rpTo').value;
       const storeId = document.getElementById('rpStore').value;
@@ -1994,8 +2028,7 @@ const Pages = {
 // DÉMARRAGE DE L'APPLICATION APRÈS CONNEXION
 // ==================================================================
 async function boot(){
-  const storesSnap = await db.collection('points_vente').orderBy('nom').get();
-  AppState.stores = storesSnap.docs.map(d=>({id:d.id,...d.data()}));
+  await ensureStores(true); // rechargement forcé : boot() marque le début de session / suit une modif de magasin
   const sw = document.getElementById('storeSwitcher');
   if(!AppState.stores.length){
     sw.innerHTML = `<option value="">Aucun magasin</option>`;
